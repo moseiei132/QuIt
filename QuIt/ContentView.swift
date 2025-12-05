@@ -20,6 +20,50 @@ struct RunningApp: Identifiable, Hashable {
     let pid: pid_t
 }
 
+// Notification name for excluded apps changes
+extension Notification.Name {
+    static let excludedAppsDidChange = Notification.Name("excludedAppsDidChange")
+}
+
+// Manager for excluded apps with persistence
+class ExcludedAppsManager: ObservableObject {
+    static let shared = ExcludedAppsManager()
+    
+    @Published var excludedBundleIDs: Set<String> {
+        didSet {
+            save()
+            NotificationCenter.default.post(name: .excludedAppsDidChange, object: nil)
+        }
+    }
+    
+    private let userDefaultsKey = "excludedApps"
+    
+    private init() {
+        if let savedData = UserDefaults.standard.array(forKey: userDefaultsKey) as? [String] {
+            excludedBundleIDs = Set(savedData)
+        } else {
+            excludedBundleIDs = []
+        }
+    }
+    
+    private func save() {
+        UserDefaults.standard.set(Array(excludedBundleIDs), forKey: userDefaultsKey)
+    }
+    
+    func addExclusion(_ bundleID: String) {
+        excludedBundleIDs.insert(bundleID)
+    }
+    
+    func removeExclusion(_ bundleID: String) {
+        excludedBundleIDs.remove(bundleID)
+    }
+    
+    func isExcluded(_ bundleID: String?) -> Bool {
+        guard let bundleID = bundleID else { return false }
+        return excludedBundleIDs.contains(bundleID)
+    }
+}
+
 // ViewModel to observe running apps and selection state
 @MainActor
 final class RunningAppsModel: ObservableObject {
@@ -52,12 +96,19 @@ final class RunningAppsModel: ObservableObject {
             guard let self else { return }
             triggerReload(self)
         })
+        
+        // Observe exclusion list changes
+        observers.append(NotificationCenter.default.addObserver(forName: .excludedAppsDidChange, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            triggerReload(self)
+        })
     }
 
     deinit {
-        let center = NSWorkspace.shared.notificationCenter
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
         for obs in observers {
-            center.removeObserver(obs)
+            workspaceCenter.removeObserver(obs)
+            NotificationCenter.default.removeObserver(obs)
         }
     }
 
@@ -90,8 +141,14 @@ final class RunningAppsModel: ObservableObject {
 
     func reload() {
         let currentPID = NSRunningApplication.current.processIdentifier
+        let excludedManager = ExcludedAppsManager.shared
+        
         let running = NSWorkspace.shared.runningApplications
-            .filter { isForceQuitEligible($0) && $0.processIdentifier != currentPID }
+            .filter { 
+                isForceQuitEligible($0) && 
+                $0.processIdentifier != currentPID &&
+                !excludedManager.isExcluded($0.bundleIdentifier)
+            }
             .map { app -> RunningApp in
                 let pid = app.processIdentifier
                 let id = Int(pid) // unique per process
@@ -233,6 +290,15 @@ struct ContentView: View {
                         .opacity(0.9)
                     Spacer()
                     Button {
+                        openSettingsWindow()
+                    } label: {
+                        Image(systemName: "gear")
+                            .imageScale(.medium)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Settings")
+                    
+                    Button {
                         model.reload()
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -344,6 +410,350 @@ struct ContentView: View {
                 .strokeBorder(.white.opacity(0.15), lineWidth: 1)
         )
         .frame(width: 300)
+    }
+    
+    private func openSettingsWindow() {
+        // If window already exists, just bring it to front
+        if let existingWindow = WindowManager.shared.settingsWindow {
+            existingWindow.makeKeyAndOrderFront(nil)
+            existingWindow.center()
+            return
+        }
+        
+        let settingsView = SettingsView()
+        let hostingController = NSHostingController(rootView: settingsView)
+        
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Settings"
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.isReleasedWhenClosed = false
+        
+        // Center on main screen
+        if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            let windowSize = NSSize(width: 500, height: 700)
+            let origin = NSPoint(
+                x: screenFrame.midX - windowSize.width / 2,
+                y: screenFrame.midY - windowSize.height / 2
+            )
+            window.setFrame(NSRect(origin: origin, size: windowSize), display: true)
+        } else {
+            window.center()
+        }
+        
+        window.makeKeyAndOrderFront(nil)
+        window.level = .floating
+        
+        // Keep a reference to prevent deallocation
+        WindowManager.shared.settingsWindow = window
+    }
+}
+
+// Singleton to manage windows
+class WindowManager {
+    static let shared = WindowManager()
+    var settingsWindow: NSWindow?
+    
+    private init() {}
+}
+
+struct SettingsView: View {
+    @State private var selectedTab = 0
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Tab View
+            TabView(selection: $selectedTab) {
+                AboutTabView()
+                    .tabItem {
+                        Label("About", systemImage: "info.circle")
+                    }
+                    .tag(0)
+                
+                ExcludeAppsTabView()
+                    .tabItem {
+                        Label("Exclude Apps", systemImage: "eye.slash")
+                    }
+                    .tag(1)
+            }
+        }
+        .frame(width: 500, height: 700)
+    }
+}
+
+struct AboutTabView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("About QuIt")
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Version 1.0")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                
+                Text("QuIt helps you quickly quit multiple applications at once.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Permissions")
+                    .font(.headline)
+                
+                Text("QuIt requires Automation permission to quit other apps. If apps won't quit, check System Settings → Privacy & Security → Automation.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+        .padding(20)
+    }
+}
+
+struct ExcludeAppsTabView: View {
+    @ObservedObject private var excludedManager = ExcludedAppsManager.shared
+    @State private var availableApps: [(bundleID: String, name: String, icon: NSImage?)] = []
+    @State private var searchText = ""
+    @State private var isLoading = true
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Excluded Applications")
+                .font(.headline)
+            
+            Text("Applications in this list will not appear in the running apps list.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            
+            Divider()
+            
+            // List of excluded apps
+            if excludedManager.excludedBundleIDs.isEmpty {
+                Text("No excluded applications")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
+            } else {
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(Array(excludedManager.excludedBundleIDs), id: \.self) { bundleID in
+                            HStack(spacing: 8) {
+                                if let appInfo = getAppInfo(for: bundleID) {
+                                    if let icon = appInfo.icon {
+                                        Image(nsImage: icon)
+                                            .resizable()
+                                            .frame(width: 20, height: 20)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(appInfo.name)
+                                            .font(.body)
+                                        Text(bundleID)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                } else {
+                                    Text(bundleID)
+                                        .font(.body)
+                                }
+                                
+                                Spacer()
+                                
+                                Button {
+                                    excludedManager.removeExclusion(bundleID)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundStyle(.red)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove from exclusion list")
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+            
+            Divider()
+            
+            // Add new exclusion
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Add Application to Exclude")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 20, height: 20)
+                    }
+                }
+                
+                TextField("Search applications...", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                
+                if isLoading && availableApps.isEmpty {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            ProgressView()
+                            Text("Loading applications...")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 30)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 4) {
+                            ForEach(filteredAvailableApps, id: \.bundleID) { app in
+                                HStack(spacing: 8) {
+                                    if let icon = app.icon {
+                                        Image(nsImage: icon)
+                                            .resizable()
+                                            .frame(width: 20, height: 20)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(app.name)
+                                            .font(.body)
+                                        Text(app.bundleID)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    if excludedManager.excludedBundleIDs.contains(app.bundleID) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.green)
+                                    } else {
+                                        Button {
+                                            excludedManager.addExclusion(app.bundleID)
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .foregroundStyle(.blue)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Add to exclusion list")
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(Color.gray.opacity(0.05))
+                                .cornerRadius(6)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 300)
+                }
+            }
+        }
+        .padding(20)
+        .onAppear {
+            if availableApps.isEmpty {
+                loadAvailableApps()
+            }
+        }
+    }
+    
+    private var filteredAvailableApps: [(bundleID: String, name: String, icon: NSImage?)] {
+        if searchText.isEmpty {
+            return availableApps
+        }
+        return availableApps.filter { app in
+            app.name.localizedCaseInsensitiveContains(searchText) ||
+            app.bundleID.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+    
+    private func loadAvailableApps() {
+        isLoading = true
+        
+        Task.detached(priority: .userInitiated) {
+            var apps: [(bundleID: String, name: String, icon: NSImage?)] = []
+            let fileManager = FileManager.default
+            
+            // Common application directories
+            let appDirectories = [
+                "/Applications",
+                "/System/Applications",
+                "/System/Library/CoreServices/Applications",
+                "\(NSHomeDirectory())/Applications"
+            ]
+            
+            var foundBundleIDs = Set<String>()
+            
+            for directory in appDirectories {
+                guard let enumerator = fileManager.enumerator(
+                    at: URL(fileURLWithPath: directory),
+                    includingPropertiesForKeys: [.isDirectoryKey, .isApplicationKey],
+                    options: [.skipsHiddenFiles]
+                ) else { continue }
+                
+                for case let fileURL as URL in enumerator {
+                    // Check if it's an app bundle
+                    if fileURL.pathExtension == "app" {
+                        if let bundle = Bundle(url: fileURL),
+                           let bundleID = bundle.bundleIdentifier,
+                           !foundBundleIDs.contains(bundleID),
+                           bundleID != Bundle.main.bundleIdentifier {
+                            
+                            foundBundleIDs.insert(bundleID)
+                            
+                            let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+                                ?? bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                                ?? fileURL.deletingPathExtension().lastPathComponent
+                            
+                            let icon = NSWorkspace.shared.icon(forFile: fileURL.path)
+                            
+                            apps.append((bundleID, name, icon))
+                        }
+                        
+                        // Don't traverse into app bundles
+                        enumerator.skipDescendants()
+                    }
+                }
+            }
+            
+            // Sort by name
+            apps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            
+            await MainActor.run {
+                self.availableApps = apps
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func getAppInfo(for bundleID: String) -> (name: String, icon: NSImage?)? {
+        if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }) {
+            return (app.localizedName ?? bundleID, app.icon)
+        }
+        
+        // Try to get info from installed apps
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+           let bundle = Bundle(url: url) {
+            let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String ?? bundleID
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            return (name, icon)
+        }
+        
+        return nil
     }
 }
 
