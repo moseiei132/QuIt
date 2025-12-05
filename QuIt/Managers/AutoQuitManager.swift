@@ -8,6 +8,7 @@
 import AppKit
 import Combine
 import Foundation
+import UserNotifications
 
 // Manager for auto-quit feature with event-driven individual timers
 class AutoQuitManager: ObservableObject {
@@ -55,6 +56,12 @@ class AutoQuitManager: ObservableObject {
         }
     }
     
+    @Published var notifyOnAutoQuit: Bool = true { // Show notification when app is auto-quit
+        didSet {
+            saveSettings()
+        }
+    }
+    
     @Published var activeTimersCount: Int = 0
     @Published var lastActivityTime: Date?
     
@@ -62,6 +69,7 @@ class AutoQuitManager: ObservableObject {
     private let respectExcludeAppsKey = "autoQuitRespectExcludeApps"
     private let defaultTimeoutKey = "autoQuitDefaultTimeout"
     private let appTimeoutsKey = "autoQuitAppTimeouts"
+    private let notifyOnAutoQuitKey = "autoQuitNotifyOnAutoQuit"
     
     // Track individual timers per app
     private var appTimers: [String: Timer] = [:]
@@ -70,9 +78,68 @@ class AutoQuitManager: ObservableObject {
     
     private init() {
         loadSettings()
+        requestNotificationPermissions()
         
         if isEnabled {
             startMonitoring()
+        }
+    }
+    
+    private func requestNotificationPermissions() {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if granted {
+                print("✅ Notification permission granted")
+            } else if let error = error {
+                print("❌ Notification permission error: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func sendNotification(for appName: String, bundleID: String, timeout: TimeInterval) {
+        guard notifyOnAutoQuit else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "App Auto-Quit"
+        
+        // Format timeout duration
+        let timeoutString: String
+        if timeout >= 3600 {
+            let hours = Int(timeout / 3600)
+            let minutes = Int((timeout.truncatingRemainder(dividingBy: 3600)) / 60)
+            if minutes > 0 {
+                timeoutString = "\(hours)h \(minutes)m"
+            } else {
+                timeoutString = "\(hours)h"
+            }
+        } else if timeout >= 60 {
+            let minutes = Int(timeout / 60)
+            timeoutString = "\(minutes)m"
+        } else {
+            timeoutString = "\(Int(timeout))s"
+        }
+        
+        // Format current date/time
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        let dateTimeString = dateFormatter.string(from: Date())
+        
+        content.body = "\(appName) was automatically quit after \(timeoutString) of inactivity.\n\nQuit at: \(dateTimeString)"
+        content.sound = .default
+        
+        let request = UNNotificationRequest(
+            identifier: "autoquit-\(bundleID)-\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: nil // Deliver immediately
+        )
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("❌ Failed to send notification: \(error.localizedDescription)")
+            } else {
+                print("📬 Notification sent for: \(appName)")
+            }
         }
     }
     
@@ -92,6 +159,13 @@ class AutoQuitManager: ObservableObject {
             respectExcludeApps = true // Default behavior
         }
         
+        // Load notifyOnAutoQuit, default to true if not set
+        if UserDefaults.standard.object(forKey: notifyOnAutoQuitKey) != nil {
+            notifyOnAutoQuit = UserDefaults.standard.bool(forKey: notifyOnAutoQuitKey)
+        } else {
+            notifyOnAutoQuit = true // Default behavior
+        }
+        
         let savedDefaultTimeout = UserDefaults.standard.double(forKey: defaultTimeoutKey)
         if savedDefaultTimeout > 0 {
             defaultTimeout = savedDefaultTimeout
@@ -107,6 +181,7 @@ class AutoQuitManager: ObservableObject {
         print("✅ Auto-quit settings loaded from storage:")
         print("   - Enabled: \(isEnabled)")
         print("   - Respect exclude apps: \(respectExcludeApps)")
+        print("   - Notify on auto-quit: \(notifyOnAutoQuit)")
         print("   - Default timeout: \(Int(defaultTimeout))s (\(Int(defaultTimeout/60))m)")
         print("   - Custom timeouts: \(appTimeouts.count) apps")
     }
@@ -114,6 +189,7 @@ class AutoQuitManager: ObservableObject {
     private func saveSettings() {
         UserDefaults.standard.set(isEnabled, forKey: isEnabledKey)
         UserDefaults.standard.set(respectExcludeApps, forKey: respectExcludeAppsKey)
+        UserDefaults.standard.set(notifyOnAutoQuit, forKey: notifyOnAutoQuitKey)
         UserDefaults.standard.set(defaultTimeout, forKey: defaultTimeoutKey)
         
         if let encoded = try? JSONEncoder().encode(appTimeouts) {
@@ -412,6 +488,7 @@ class AutoQuitManager: ObservableObject {
     private func quitApp(_ app: NSRunningApplication) {
         guard let bundleID = app.bundleIdentifier else { return }
         let appName = app.localizedName ?? bundleID
+        let timeout = getTimeout(for: bundleID)
         
         print("🔄 Auto-quit triggered for: \(appName)")
         
@@ -423,6 +500,8 @@ class AutoQuitManager: ObservableObject {
             print("❌ Auto-quit failed for \(bundleID): \(error)")
         } else {
             print("✅ Auto-quit command sent to: \(appName)")
+            // Send notification if enabled with timeout info
+            sendNotification(for: appName, bundleID: bundleID, timeout: timeout)
         }
     }
 }
