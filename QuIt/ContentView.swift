@@ -72,55 +72,6 @@ final class RunningAppsModel: ObservableObject {
     @Published var apps: [RunningApp] = []
     @Published var selectedIDs: Set<Int> = []
 
-    private var observers: [Any] = []
-
-    init() {
-        // Defer main-actor work until after initialization completes.
-        Task { @MainActor in
-            self.reload()
-        }
-
-        let center = NSWorkspace.shared.notificationCenter
-
-        // Capture a nonisolated function reference that will hop to the main actor.
-        let triggerReload = Self.triggerReload
-
-        observers.append(center.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            triggerReload(self)
-        })
-        observers.append(center.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            triggerReload(self)
-        })
-        observers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            triggerReload(self)
-        })
-        
-        // Observe exclusion list changes
-        observers.append(NotificationCenter.default.addObserver(forName: .excludedAppsDidChange, object: nil, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            triggerReload(self)
-        })
-    }
-
-    deinit {
-        let workspaceCenter = NSWorkspace.shared.notificationCenter
-        for obs in observers {
-            workspaceCenter.removeObserver(obs)
-            NotificationCenter.default.removeObserver(obs)
-        }
-    }
-
-    // Static helper that safely hops to the main actor to call reload without capturing
-    // main-actor isolated self in a @Sendable context.
-    nonisolated private static func triggerReload(_ model: RunningAppsModel) {
-        Task { @MainActor in
-            model.reload()
-        }
-    }
-
     private func isForceQuitEligible(_ app: NSRunningApplication) -> Bool {
         // Emulate Force Quit Applications list:
         // - Only user apps with a normal UI (activationPolicy == .regular)
@@ -438,6 +389,10 @@ struct ContentView: View {
                 .strokeBorder(.white.opacity(0.15), lineWidth: 1)
         )
         .frame(width: 300)
+        .onAppear {
+            // Load apps only when popover opens
+            model.reload()
+        }
     }
     
     private func openSettingsWindow() {
