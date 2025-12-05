@@ -1,7 +1,7 @@
 import Cocoa
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
 
@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: ContentView()
                 .ignoresSafeArea() // Allow material to reach edges
         )
+        popover.delegate = self
 
         // Create status item with an image template
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -37,6 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Ensure the app becomes active so keyboard focus works
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+    
+    // NSPopoverDelegate method - called when popover is about to show
+    func popoverWillShow(_ notification: Notification) {
+        // Post notification to reload apps list
+        NotificationCenter.default.post(name: .popoverWillOpen, object: nil)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
