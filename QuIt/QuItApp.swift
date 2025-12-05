@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct QuItApp: App {
+    // Hook into AppDelegate to manage NSStatusItem / NSPopover lifecycle
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        // No main window. Keep an empty Settings scene if you want app preferences later.
+        Settings {
+            EmptyView()
         }
     }
 }
