@@ -10,6 +10,7 @@ import SwiftUI
 
 struct GeneralSettingsTabView: View {
     @State private var launchAtLogin: Bool = false
+    @ObservedObject private var autoQuitManager = AutoQuitManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -30,6 +31,21 @@ struct GeneralSettingsTabView: View {
                     }
 
                 Text("Automatically start QuIt when you log in to your Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Notifications")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Toggle("Notify on Auto-Quit", isOn: $autoQuitManager.notifyOnAutoQuit)
+                    .toggleStyle(.switch)
+
+                Text("Show a notification when an app is automatically quit.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
