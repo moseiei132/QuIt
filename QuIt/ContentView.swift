@@ -314,15 +314,6 @@ struct ContentView: View {
                     Spacer()
                     
                     Button {
-                        openSettingsWindow()
-                    } label: {
-                        Image(systemName: "gear")
-                            .imageScale(.medium)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Settings")
-                    
-                    Button {
                         model.reload()
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -422,16 +413,16 @@ struct ContentView: View {
                     .controlSize(.small)
                     .disabled(model.selectedIDs.isEmpty)
 
+                    Spacer(minLength: 8)
+
                     Button {
-                        // Example: Print selected app IDs
-                        print("Selected apps: \(model.selectedIDs)")
+                        openSettingsWindow()
                     } label: {
-                        Label("Do Something", systemImage: "sparkles")
+                        Image(systemName: "gear")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-
-                    Spacer(minLength: 8)
+                    .help("Settings")
 
                     Button(role: .destructive) {
                         NSApp.terminate(nil)
