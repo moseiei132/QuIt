@@ -16,8 +16,10 @@ class AutoQuitManager: ObservableObject {
     
     @Published var isEnabled: Bool = false {
         didSet {
-            saveSettings()
-            NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            if !isLoading {
+                saveSettings()
+                NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            }
             if isEnabled {
                 startMonitoring()
             } else {
@@ -28,8 +30,10 @@ class AutoQuitManager: ObservableObject {
     
     @Published var respectExcludeApps: Bool = true { // Respect exclude apps list
         didSet {
-            saveSettings()
-            NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            if !isLoading {
+                saveSettings()
+                NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            }
             // Reschedule all timers with new exclusion rules
             if isEnabled {
                 rescheduleAllTimers()
@@ -39,8 +43,10 @@ class AutoQuitManager: ObservableObject {
     
     @Published var defaultTimeout: TimeInterval = 300 { // 5 minutes default
         didSet {
-            saveSettings()
-            NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            if !isLoading {
+                saveSettings()
+                NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            }
             // Reschedule all timers with new default
             if isEnabled {
                 rescheduleAllTimers()
@@ -58,7 +64,9 @@ class AutoQuitManager: ObservableObject {
     
     @Published var notifyOnAutoQuit: Bool = true { // Show notification when app is auto-quit
         didSet {
-            saveSettings()
+            if !isLoading {
+                saveSettings()
+            }
         }
     }
     
@@ -83,6 +91,8 @@ class AutoQuitManager: ObservableObject {
         if isEnabled {
             startMonitoring()
         }
+        
+        print("✅ AutoQuitManager initialized successfully")
     }
     
     private func requestNotificationPermissions() {
@@ -194,10 +204,19 @@ class AutoQuitManager: ObservableObject {
         
         if let encoded = try? JSONEncoder().encode(appTimeouts) {
             UserDefaults.standard.set(encoded, forKey: appTimeoutsKey)
-            UserDefaults.standard.synchronize() // Force immediate save to disk
+        } else {
+            print("⚠️ Failed to encode appTimeouts")
         }
         
-        print("💾 Auto-quit settings saved to storage")
+        // Force immediate save to disk for all settings
+        UserDefaults.standard.synchronize()
+        
+        print("💾 Auto-quit settings saved to storage:")
+        print("   - Enabled: \(isEnabled)")
+        print("   - Respect exclude apps: \(respectExcludeApps)")
+        print("   - Notify on auto-quit: \(notifyOnAutoQuit)")
+        print("   - Default timeout: \(Int(defaultTimeout))s")
+        print("   - Custom timeouts: \(appTimeouts.count) apps")
     }
     
     func getTimeout(for bundleID: String?) -> TimeInterval {
@@ -209,6 +228,7 @@ class AutoQuitManager: ObservableObject {
     }
     
     func setTimeout(for bundleID: String, timeout: TimeInterval) {
+        print("⚙️ Setting custom timeout for \(bundleID): \(Int(timeout))s")
         appTimeouts[bundleID] = timeout
         objectWillChange.send()
         NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
@@ -220,6 +240,7 @@ class AutoQuitManager: ObservableObject {
     }
     
     func removeTimeout(for bundleID: String) {
+        print("🗑️ Removing custom timeout for \(bundleID)")
         appTimeouts.removeValue(forKey: bundleID)
         objectWillChange.send()
         NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
@@ -252,6 +273,12 @@ class AutoQuitManager: ObservableObject {
                   let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   let bundleID = app.bundleIdentifier else { return }
             
+            // Don't process QuIt itself
+            let currentPID = NSRunningApplication.current.processIdentifier
+            guard app.processIdentifier != currentPID else {
+                return
+            }
+            
             // Cancel timer for this app (it's now active)
             self.cancelTimer(for: bundleID)
             self.updateLastActivity()
@@ -268,6 +295,13 @@ class AutoQuitManager: ObservableObject {
                   let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   let bundleID = app.bundleIdentifier else { return }
             
+            // Don't schedule timer for QuIt itself!
+            let currentPID = NSRunningApplication.current.processIdentifier
+            guard app.processIdentifier != currentPID else {
+                print("⏭️ Skipping timer for QuIt itself")
+                return
+            }
+            
             // Schedule timer for this app
             self.scheduleTimerForApp(bundleID, app: app)
             self.updateLastActivity()
@@ -283,6 +317,12 @@ class AutoQuitManager: ObservableObject {
             guard let self = self,
                   let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   let bundleID = app.bundleIdentifier else { return }
+            
+            // Don't process QuIt itself (shouldn't happen, but safety check)
+            let currentPID = NSRunningApplication.current.processIdentifier
+            guard app.processIdentifier != currentPID else {
+                return
+            }
             
             // Clean up timer for terminated app
             self.cancelTimer(for: bundleID)
@@ -363,6 +403,13 @@ class AutoQuitManager: ObservableObject {
     private func scheduleTimerForApp(_ bundleID: String, app: NSRunningApplication) {
         guard isEnabled else {
             print("⚠️ Auto-quit disabled, not scheduling timer for \(bundleID)")
+            return
+        }
+        
+        // CRITICAL: Never schedule a timer for QuIt itself!
+        let currentPID = NSRunningApplication.current.processIdentifier
+        guard app.processIdentifier != currentPID else {
+            print("🛡️ SAFETY: Prevented QuIt from scheduling itself for auto-quit")
             return
         }
         
