@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             // Use a system symbol that looks good in the menu bar
-            let image = NSImage(systemSymbolName: "circle.hexagongrid", accessibilityDescription: "QuIt")
+            let image = NSImage(systemSymbolName: "power", accessibilityDescription: "QuIt")
             image?.isTemplate = true // Adapts to light/dark menu bar
             button.image = image
             button.action = #selector(togglePopover(_:))
