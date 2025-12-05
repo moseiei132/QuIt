@@ -89,8 +89,9 @@ final class RunningAppsModel: ObservableObject {
     }
 
     func reload() {
+        let currentPID = NSRunningApplication.current.processIdentifier
         let running = NSWorkspace.shared.runningApplications
-            .filter { isForceQuitEligible($0) }
+            .filter { isForceQuitEligible($0) && $0.processIdentifier != currentPID }
             .map { app -> RunningApp in
                 let pid = app.processIdentifier
                 let id = Int(pid) // unique per process
@@ -301,7 +302,7 @@ struct ContentView: View {
                         // Quit all selected apps gracefully (normal quit).
                         model.quitSelectedApps()
                     } label: {
-                        Label("Quit Selected", systemImage: "xmark.circle")
+                        Label("Quit Apps", systemImage: "xmark.circle")
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -321,10 +322,11 @@ struct ContentView: View {
                     Button(role: .destructive) {
                         NSApp.terminate(nil)
                     } label: {
-                        Label("Quit App", systemImage: "power")
+                        Image(systemName: "power")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .help("Quit QuIt")
                 }
 
                 if let result = model.lastQuitResult {
