@@ -22,9 +22,10 @@ struct RunningApp: Identifiable, Hashable {
     let pid: pid_t
 }
 
-// Notification name for excluded apps changes
+// Notification name for excluded apps changes and popover events
 extension Notification.Name {
     static let excludedAppsDidChange = Notification.Name("excludedAppsDidChange")
+    static let popoverWillOpen = Notification.Name("popoverWillOpen")
 }
 
 // Manager for excluded apps with persistence
@@ -391,6 +392,10 @@ struct ContentView: View {
         .frame(width: 300)
         .onAppear {
             // Load apps only when popover opens
+            model.reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .popoverWillOpen)) { _ in
+            // Reload apps list every time popover opens
             model.reload()
         }
     }
