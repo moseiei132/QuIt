@@ -141,13 +141,11 @@ final class RunningAppsModel: ObservableObject {
 
     func reload() {
         let currentPID = NSRunningApplication.current.processIdentifier
-        let excludedManager = ExcludedAppsManager.shared
         
         let running = NSWorkspace.shared.runningApplications
             .filter { 
                 isForceQuitEligible($0) && 
-                $0.processIdentifier != currentPID &&
-                !excludedManager.isExcluded($0.bundleIdentifier)
+                $0.processIdentifier != currentPID
             }
             .map { app -> RunningApp in
                 let pid = app.processIdentifier
@@ -184,6 +182,31 @@ final class RunningAppsModel: ObservableObject {
         } else {
             selectedIDs.insert(app.id)
         }
+    }
+    
+    func toggleSelectAll() {
+        if areAllNonExcludedSelected() {
+            // Deselect all
+            selectedIDs.removeAll()
+        } else {
+            // Select all non-excluded apps
+            let excludedManager = ExcludedAppsManager.shared
+            selectedIDs = Set(apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }.map { $0.id })
+        }
+    }
+    
+    func areAllNonExcludedSelected() -> Bool {
+        let excludedManager = ExcludedAppsManager.shared
+        let nonExcludedApps = apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }
+        
+        guard !nonExcludedApps.isEmpty else { return false }
+        
+        let nonExcludedIDs = Set(nonExcludedApps.map { $0.id })
+        return nonExcludedIDs.isSubset(of: selectedIDs) && nonExcludedIDs.count == nonExcludedIDs.intersection(selectedIDs).count
+    }
+    
+    func isExcluded(_ app: RunningApp) -> Bool {
+        return ExcludedAppsManager.shared.isExcluded(app.bundleIdentifier)
     }
 
     // Quit all selected apps using a "VacuumClone-like" approach:
@@ -289,6 +312,7 @@ struct ContentView: View {
                         .font(.headline)
                         .opacity(0.9)
                     Spacer()
+                    
                     Button {
                         openSettingsWindow()
                     } label: {
@@ -307,6 +331,19 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .help("Refresh")
                 }
+                
+                // Select/Deselect All button
+                Button {
+                    model.toggleSelectAll()
+                } label: {
+                    Label(
+                        model.areAllNonExcludedSelected() ? "Deselect All" : "Select All",
+                        systemImage: model.areAllNonExcludedSelected() ? "checkmark.square.fill" : "checkmark.square"
+                    )
+                    .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 if model.apps.isEmpty {
                     Text("No running applications found.")
@@ -316,6 +353,7 @@ struct ContentView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 6) {
                             ForEach(model.apps) { app in
+                                let isExcluded = model.isExcluded(app)
                                 HStack(spacing: 8) {
                                     // App icon
                                     Image(nsImage: app.icon ?? NSImage())
@@ -327,11 +365,21 @@ struct ContentView: View {
                                             RoundedRectangle(cornerRadius: 4)
                                                 .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                                         )
+                                        .opacity(isExcluded ? 0.6 : 1.0)
 
-                                    // App name
-                                    Text(app.name)
-                                        .font(.body)
-                                        .lineLimit(1)
+                                    // App name with exclude indicator
+                                    HStack(spacing: 4) {
+                                        Text(app.name)
+                                            .font(.body)
+                                            .lineLimit(1)
+                                            .foregroundColor(isExcluded ? .yellow : .primary)
+                                        
+                                        if isExcluded {
+                                            Text("(exclude)")
+                                                .font(.caption2)
+                                                .foregroundColor(.yellow.opacity(0.8))
+                                        }
+                                    }
 
                                     Spacer(minLength: 8)
 
@@ -705,7 +753,7 @@ struct ExcludeAppsTabView: View {
                     options: [.skipsHiddenFiles]
                 ) else { continue }
                 
-                for case let fileURL as URL in enumerator {
+                while let fileURL = enumerator.nextObject() as? URL {
                     // Check if it's an app bundle
                     if fileURL.pathExtension == "app" {
                         if let bundle = Bundle(url: fileURL),
@@ -733,8 +781,9 @@ struct ExcludeAppsTabView: View {
             // Sort by name
             apps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             
+            let finalApps = apps
             await MainActor.run {
-                self.availableApps = apps
+                self.availableApps = finalApps
                 self.isLoading = false
             }
         }
