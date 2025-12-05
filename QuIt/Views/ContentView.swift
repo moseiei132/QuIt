@@ -286,11 +286,9 @@ struct ContentView: View {
         let settingsView = SettingsView()
         let hostingController = NSHostingController(rootView: settingsView)
 
-        let window = NSWindow(contentViewController: hostingController)
+        let window = SettingsWindow(contentViewController: hostingController)
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        // Keep window in memory after closing to avoid memory issues
-        window.isReleasedWhenClosed = false
 
         // Center on main screen
         if let screen = NSScreen.main {
@@ -307,8 +305,22 @@ struct ContentView: View {
 
         window.makeKeyAndOrderFront(nil)
 
-        // Keep a reference to prevent deallocation
+        // Keep a reference
         WindowManager.shared.settingsWindow = window
+    }
+}
+
+// Custom NSWindow subclass that cleans up on close
+class SettingsWindow: NSWindow {
+    override func close() {
+        print("🗑️ Settings window closing - cleaning up reference and freeing memory")
+        // Clean up the reference BEFORE closing to avoid issues
+        WindowManager.shared.settingsWindow = nil
+        super.close()
+    }
+    
+    deinit {
+        print("✅ Settings window deallocated - memory freed")
     }
 }
 
