@@ -5,10 +5,10 @@
 //  Created by Dulyawat on 5/12/2568 BE.
 //
 
-import SwiftUI
 import AppKit
 import Combine
 import ServiceManagement
+import SwiftUI
 import UniformTypeIdentifiers
 
 // Model to represent a running app snapshot
@@ -28,42 +28,152 @@ extension Notification.Name {
     static let popoverWillOpen = Notification.Name("popoverWillOpen")
 }
 
-// Manager for excluded apps with persistence
+// Model for an exclusion profile
+struct ExclusionProfile: Codable, Identifiable, Hashable {
+    let id: UUID
+    var name: String
+    var excludedBundleIDs: Set<String>
+
+    init(id: UUID = UUID(), name: String, excludedBundleIDs: Set<String> = []) {
+        self.id = id
+        self.name = name
+        self.excludedBundleIDs = excludedBundleIDs
+    }
+}
+
+// Manager for excluded apps with persistence and profile support
 class ExcludedAppsManager: ObservableObject {
     static let shared = ExcludedAppsManager()
-    
-    @Published var excludedBundleIDs: Set<String> {
+
+    @Published var profiles: [ExclusionProfile] = []
+    @Published var selectedProfileID: UUID? {
         didSet {
-            save()
+            saveSelectedProfile()
             NotificationCenter.default.post(name: .excludedAppsDidChange, object: nil)
         }
     }
-    
-    private let userDefaultsKey = "excludedApps"
-    
+
+    var currentProfile: ExclusionProfile? {
+        if let selectedID = selectedProfileID {
+            return profiles.first(where: { $0.id == selectedID })
+        }
+        return profiles.first
+    }
+
+    var excludedBundleIDs: Set<String> {
+        currentProfile?.excludedBundleIDs ?? []
+    }
+
+    private let profilesKey = "excludedAppsProfiles"
+    private let selectedProfileKey = "selectedExcludedAppsProfile"
+
     private init() {
-        if let savedData = UserDefaults.standard.array(forKey: userDefaultsKey) as? [String] {
-            excludedBundleIDs = Set(savedData)
+        loadProfiles()
+
+        // If no profiles exist, create a default one
+        if profiles.isEmpty {
+            let defaultProfile = ExclusionProfile(name: "Default", excludedBundleIDs: [])
+            profiles = [defaultProfile]
+            selectedProfileID = defaultProfile.id
+            saveProfiles()
         } else {
-            excludedBundleIDs = []
+            loadSelectedProfile()
         }
     }
-    
-    private func save() {
-        UserDefaults.standard.set(Array(excludedBundleIDs), forKey: userDefaultsKey)
+
+    private func loadProfiles() {
+        if let data = UserDefaults.standard.data(forKey: profilesKey),
+            let decoded = try? JSONDecoder().decode([ExclusionProfile].self, from: data)
+        {
+            profiles = decoded
+        }
     }
-    
+
+    private func saveProfiles() {
+        if let encoded = try? JSONEncoder().encode(profiles) {
+            UserDefaults.standard.set(encoded, forKey: profilesKey)
+        }
+    }
+
+    private func loadSelectedProfile() {
+        if let uuidString = UserDefaults.standard.string(forKey: selectedProfileKey),
+            let uuid = UUID(uuidString: uuidString),
+            profiles.contains(where: { $0.id == uuid })
+        {
+            selectedProfileID = uuid
+        } else {
+            selectedProfileID = profiles.first?.id
+        }
+    }
+
+    private func saveSelectedProfile() {
+        if let selectedID = selectedProfileID {
+            UserDefaults.standard.set(selectedID.uuidString, forKey: selectedProfileKey)
+        }
+    }
+
     func addExclusion(_ bundleID: String) {
-        excludedBundleIDs.insert(bundleID)
+        guard var profile = currentProfile,
+            let index = profiles.firstIndex(where: { $0.id == profile.id })
+        else { return }
+
+        profile.excludedBundleIDs.insert(bundleID)
+        profiles[index] = profile
+        saveProfiles()
+        objectWillChange.send()
+        NotificationCenter.default.post(name: .excludedAppsDidChange, object: nil)
     }
-    
+
     func removeExclusion(_ bundleID: String) {
-        excludedBundleIDs.remove(bundleID)
+        guard var profile = currentProfile,
+            let index = profiles.firstIndex(where: { $0.id == profile.id })
+        else { return }
+
+        profile.excludedBundleIDs.remove(bundleID)
+        profiles[index] = profile
+        saveProfiles()
+        objectWillChange.send()
+        NotificationCenter.default.post(name: .excludedAppsDidChange, object: nil)
     }
-    
+
     func isExcluded(_ bundleID: String?) -> Bool {
         guard let bundleID = bundleID else { return false }
         return excludedBundleIDs.contains(bundleID)
+    }
+
+    func createProfile(name: String) {
+        let newProfile = ExclusionProfile(name: name, excludedBundleIDs: [])
+        profiles.append(newProfile)
+        selectedProfileID = newProfile.id
+        saveProfiles()
+    }
+
+    func deleteProfile(_ profile: ExclusionProfile) {
+        guard profiles.count > 1 else { return }  // Keep at least one profile
+
+        profiles.removeAll { $0.id == profile.id }
+
+        if selectedProfileID == profile.id {
+            selectedProfileID = profiles.first?.id
+        }
+
+        saveProfiles()
+    }
+
+    func renameProfile(_ profile: ExclusionProfile, to newName: String) {
+        guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else { return }
+        profiles[index].name = newName
+        saveProfiles()
+        objectWillChange.send()
+    }
+
+    func duplicateProfile(_ profile: ExclusionProfile) {
+        let duplicate = ExclusionProfile(
+            name: "\(profile.name) Copy",
+            excludedBundleIDs: profile.excludedBundleIDs
+        )
+        profiles.append(duplicate)
+        saveProfiles()
     }
 }
 
@@ -83,10 +193,13 @@ final class RunningAppsModel: ObservableObject {
 
         // Extra safety: exclude LSUIElement/LSBackgroundOnly if we can detect them
         if let bundleURL = app.bundleURL,
-           let bundle = Bundle(url: bundleURL),
-           let info = bundle.infoDictionary {
+            let bundle = Bundle(url: bundleURL),
+            let info = bundle.infoDictionary
+        {
             if let isUIElement = info["LSUIElement"] as? Bool, isUIElement { return false }
-            if let isBackgroundOnly = info["LSBackgroundOnly"] as? Bool, isBackgroundOnly { return false }
+            if let isBackgroundOnly = info["LSBackgroundOnly"] as? Bool, isBackgroundOnly {
+                return false
+            }
         }
 
         return true
@@ -94,15 +207,14 @@ final class RunningAppsModel: ObservableObject {
 
     func reload() {
         let currentPID = NSRunningApplication.current.processIdentifier
-        
+
         let running = NSWorkspace.shared.runningApplications
-            .filter { 
-                isForceQuitEligible($0) && 
-                $0.processIdentifier != currentPID
+            .filter {
+                isForceQuitEligible($0) && $0.processIdentifier != currentPID
             }
             .map { app -> RunningApp in
                 let pid = app.processIdentifier
-                let id = Int(pid) // unique per process
+                let id = Int(pid)  // unique per process
                 let name = app.localizedName ?? app.bundleIdentifier ?? "PID \(pid)"
                 return RunningApp(
                     id: id,
@@ -136,7 +248,7 @@ final class RunningAppsModel: ObservableObject {
             selectedIDs.insert(app.id)
         }
     }
-    
+
     func toggleSelectAll() {
         if areAllNonExcludedSelected() {
             // Deselect all
@@ -144,20 +256,22 @@ final class RunningAppsModel: ObservableObject {
         } else {
             // Select all non-excluded apps
             let excludedManager = ExcludedAppsManager.shared
-            selectedIDs = Set(apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }.map { $0.id })
+            selectedIDs = Set(
+                apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }.map { $0.id })
         }
     }
-    
+
     func areAllNonExcludedSelected() -> Bool {
         let excludedManager = ExcludedAppsManager.shared
         let nonExcludedApps = apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }
-        
+
         guard !nonExcludedApps.isEmpty else { return false }
-        
+
         let nonExcludedIDs = Set(nonExcludedApps.map { $0.id })
-        return nonExcludedIDs.isSubset(of: selectedIDs) && nonExcludedIDs.count == nonExcludedIDs.intersection(selectedIDs).count
+        return nonExcludedIDs.isSubset(of: selectedIDs)
+            && nonExcludedIDs.count == nonExcludedIDs.intersection(selectedIDs).count
     }
-    
+
     func isExcluded(_ app: RunningApp) -> Bool {
         return ExcludedAppsManager.shared.isExcluded(app.bundleIdentifier)
     }
@@ -170,26 +284,28 @@ final class RunningAppsModel: ObservableObject {
     func quitSelectedApps() {
         // Resolve selected pids to NSRunningApplication instances.
         let selectedPIDs = Set(selectedIDs.map(pid_t.init))
-        let targets = NSWorkspace.shared.runningApplications.filter { selectedPIDs.contains($0.processIdentifier) }
-        
+        let targets = NSWorkspace.shared.runningApplications.filter {
+            selectedPIDs.contains($0.processIdentifier)
+        }
+
         guard !targets.isEmpty else {
             return
         }
-        
+
         print("🎯 Attempting to quit \(targets.count) app(s)")
 
         Task { @MainActor in
             var successCount = 0
-            
+
             for app in targets {
                 let appName = app.localizedName ?? app.bundleIdentifier ?? "Unknown"
                 print("📱 Processing: \(appName)")
-                
+
                 // 1) Activate so any save/confirmation sheets are visible.
                 _ = app.activate(options: [.activateAllWindows])
 
                 // Give focus time to transfer.
-                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s
+                try? await Task.sleep(nanoseconds: 200_000_000)  // 0.2s
 
                 // 2) Send Quit Apple Event (equivalent to user selecting Quit / Cmd-Q).
                 let sent = sendQuitAppleEventDirect(to: app)
@@ -206,21 +322,23 @@ final class RunningAppsModel: ObservableObject {
                 }
 
                 // Allow time for the app to react and possibly show dialogs.
-                try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s
+                try? await Task.sleep(nanoseconds: 400_000_000)  // 0.4s
             }
 
             // After a small delay, check which ones are still running and report.
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-            let stillRunningPIDs = Set(NSWorkspace.shared.runningApplications.map { $0.processIdentifier })
+            try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5s
+            let stillRunningPIDs = Set(
+                NSWorkspace.shared.runningApplications.map { $0.processIdentifier })
             let remaining = targets.filter { stillRunningPIDs.contains($0.processIdentifier) }
-            
+
             if remaining.isEmpty {
                 print("✅ All apps quit successfully")
             } else {
-                let names = remaining.compactMap { $0.localizedName ?? $0.bundleIdentifier }.joined(separator: ", ")
+                let names = remaining.compactMap { $0.localizedName ?? $0.bundleIdentifier }.joined(
+                    separator: ", ")
                 print("⚠️ Still running: \(names)")
             }
-            
+
             self.reload()
         }
     }
@@ -228,21 +346,21 @@ final class RunningAppsModel: ObservableObject {
     // Send a Quit Apple Event (kAEQuitApplication) to the target app using low-level Apple Events.
     // Returns true if the event was sent (not necessarily that the app quit).
     private func sendQuitAppleEventDirect(to app: NSRunningApplication) -> Bool {
-        guard let bundleID = app.bundleIdentifier else { 
+        guard let bundleID = app.bundleIdentifier else {
             print("⚠️ No bundle ID for app")
-            return false 
+            return false
         }
 
         // Try using NSAppleScript to send quit command
         var error: NSDictionary?
         let script = NSAppleScript(source: "tell application id \"\(bundleID)\" to quit")
         let result = script?.executeAndReturnError(&error)
-        
+
         if let error = error {
             print("❌ AppleScript error quitting \(bundleID): \(error)")
             return false
         }
-        
+
         print("✅ Sent quit command to \(bundleID)")
         return result != nil
     }
@@ -250,39 +368,66 @@ final class RunningAppsModel: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var model = RunningAppsModel()
+    @ObservedObject private var excludedManager = ExcludedAppsManager.shared
 
     var body: some View {
         VStack(spacing: 12) {
             // First section: Running applications with checkboxes
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Running Applications")
+                HStack(spacing: 0) {
+                    Text("Running Apps")
                         .font(.headline)
                         .opacity(0.9)
-                    Spacer()
+                    Spacer(minLength: 0)
                     
-                    Button {
-                        model.reload()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .imageScale(.medium)
+                    HStack(spacing: 2) {
+                        Menu {
+                            ForEach(excludedManager.profiles) { profile in
+                                Button {
+                                    excludedManager.selectedProfileID = profile.id
+                                    model.reload()
+                                } label: {
+                                    HStack {
+                                        Text(profile.name)
+                                        if excludedManager.selectedProfileID == profile.id {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text(excludedManager.currentProfile?.name ?? "Default")
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .frame(minWidth: 80, maxWidth: 120)
+
+                        Button {
+                            model.reload()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .imageScale(.medium)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Refresh")
                     }
-                    .buttonStyle(.plain)
-                    .help("Refresh")
                 }
-                
-                // Select/Deselect All button
-                Button {
-                    model.toggleSelectAll()
-                } label: {
-                    Label(
-                        model.areAllNonExcludedSelected() ? "Deselect All" : "Select All",
-                        systemImage: model.areAllNonExcludedSelected() ? "checkmark.square.fill" : "checkmark.square"
-                    )
-                    .font(.caption)
+
+                // Select/Deselect All checkbox
+                HStack(spacing: 6) {
+                    Toggle("", isOn: Binding(
+                        get: { model.areAllNonExcludedSelected() },
+                        set: { _ in model.toggleSelectAll() }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    
+                    Text("Select All")
+                        .font(.caption)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
 
                 if model.apps.isEmpty {
                     Text("No running applications found.")
@@ -294,6 +439,17 @@ struct ContentView: View {
                             ForEach(model.apps) { app in
                                 let isExcluded = model.isExcluded(app)
                                 HStack(spacing: 8) {
+                                    // Checkbox (Toggle style)
+                                    Toggle(
+                                        "",
+                                        isOn: Binding(
+                                            get: { model.isSelected(app) },
+                                            set: { _ in model.toggle(app) }
+                                        )
+                                    )
+                                    .toggleStyle(.checkbox)
+                                    .labelsHidden()
+                                    
                                     // App icon
                                     Image(nsImage: app.icon ?? NSImage())
                                         .resizable()
@@ -312,7 +468,7 @@ struct ContentView: View {
                                             .font(.body)
                                             .lineLimit(1)
                                             .foregroundColor(isExcluded ? .yellow : .primary)
-                                        
+
                                         if isExcluded {
                                             Text("(exclude)")
                                                 .font(.caption2)
@@ -321,21 +477,13 @@ struct ContentView: View {
                                     }
 
                                     Spacer(minLength: 8)
-
-                                    // Checkbox (Toggle style)
-                                    Toggle("", isOn: Binding(
-                                        get: { model.isSelected(app) },
-                                        set: { _ in model.toggle(app) }
-                                    ))
-                                    .toggleStyle(.checkbox)
-                                    .labelsHidden()
                                 }
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 4)
                                 .background(
                                     app.isActive
-                                    ? Color.white.opacity(0.08)
-                                    : Color.clear
+                                        ? Color.white.opacity(0.08)
+                                        : Color.clear
                                 )
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
@@ -393,11 +541,27 @@ struct ContentView: View {
         .onAppear {
             // Load apps only when popover opens
             model.reload()
+            // Auto-select all non-excluded apps after a brief delay
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                autoSelectAll()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .popoverWillOpen)) { _ in
             // Reload apps list every time popover opens
             model.reload()
+            // Auto-select all non-excluded apps after a brief delay
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                autoSelectAll()
+            }
         }
+    }
+
+    private func autoSelectAll() {
+        // Select all non-excluded apps
+        let excludedManager = ExcludedAppsManager.shared
+        model.selectedIDs = Set(model.apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }.map { $0.id })
     }
     
     private func openSettingsWindow() {
@@ -407,16 +571,16 @@ struct ContentView: View {
             existingWindow.center()
             return
         }
-        
+
         let settingsView = SettingsView()
         let hostingController = NSHostingController(rootView: settingsView)
-        
+
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
         // Keep window in memory after closing to avoid memory issues
         window.isReleasedWhenClosed = false
-        
+
         // Center on main screen
         if let screen = NSScreen.main {
             let screenFrame = screen.visibleFrame
@@ -429,9 +593,9 @@ struct ContentView: View {
         } else {
             window.center()
         }
-        
+
         window.makeKeyAndOrderFront(nil)
-        
+
         // Keep a reference to prevent deallocation
         WindowManager.shared.settingsWindow = window
     }
@@ -441,13 +605,13 @@ struct ContentView: View {
 class WindowManager {
     static let shared = WindowManager()
     var settingsWindow: NSWindow?
-    
+
     private init() {}
 }
 
 struct SettingsView: View {
     @State private var selectedTab = 0
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Tab View
@@ -457,13 +621,13 @@ struct SettingsView: View {
                         Label("General", systemImage: "gearshape")
                     }
                     .tag(0)
-                
+
                 AboutTabView()
                     .tabItem {
                         Label("About", systemImage: "info.circle")
                     }
                     .tag(1)
-                
+
                 ExcludeAppsTabView()
                     .tabItem {
                         Label("Exclude Apps", systemImage: "eye.slash")
@@ -477,30 +641,30 @@ struct SettingsView: View {
 
 struct GeneralSettingsTabView: View {
     @State private var launchAtLogin: Bool = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("General Settings")
                 .font(.headline)
-            
+
             Divider()
-            
+
             VStack(alignment: .leading, spacing: 12) {
                 Text("Startup")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .toggleStyle(.switch)
                     .onChange(of: launchAtLogin) { oldValue, newValue in
                         setLaunchAtLogin(enabled: newValue)
                     }
-                
+
                 Text("Automatically start QuIt when you log in to your Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
         }
         .padding(20)
@@ -508,14 +672,14 @@ struct GeneralSettingsTabView: View {
             launchAtLogin = isLaunchAtLoginEnabled()
         }
     }
-    
+
     private func isLaunchAtLoginEnabled() -> Bool {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled
         }
         return false
     }
-    
+
     private func setLaunchAtLogin(enabled: Bool) {
         if #available(macOS 13.0, *) {
             do {
@@ -525,7 +689,9 @@ struct GeneralSettingsTabView: View {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                print("Failed to \(enabled ? "enable" : "disable") launch at login: \(error.localizedDescription)")
+                print(
+                    "Failed to \(enabled ? "enable" : "disable") launch at login: \(error.localizedDescription)"
+                )
             }
         }
     }
@@ -536,29 +702,31 @@ struct AboutTabView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("About QuIt")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Version 1.0")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                
+
                 Text("QuIt helps you quickly quit multiple applications at once.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            
+
             Divider()
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Permissions")
                     .font(.headline)
-                
-                Text("QuIt requires Automation permission to quit other apps. If apps won't quit, check System Settings → Privacy & Security → Automation.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(
+                    "QuIt requires Automation permission to quit other apps. If apps won't quit, check System Settings → Privacy & Security → Automation."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            
+
             Spacer()
         }
         .padding(20)
@@ -567,25 +735,97 @@ struct AboutTabView: View {
 
 struct ExcludeAppsTabView: View {
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
-    
+    @State private var showingNewProfileSheet = false
+    @State private var newProfileName = ""
+    @State private var showingRenameSheet = false
+    @State private var profileToRename: ExclusionProfile?
+    @State private var renameProfileName = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Excluded Applications")
                 .font(.headline)
-            
+
             Text("Applications in this list will not appear in the running apps list.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            
+
             Divider()
-            
+
+            // Profile selector and management
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Profile:")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Picker(
+                        "",
+                        selection: Binding(
+                            get: {
+                                excludedManager.selectedProfileID ?? excludedManager.profiles.first?
+                                    .id ?? UUID()
+                            },
+                            set: { excludedManager.selectedProfileID = $0 }
+                        )
+                    ) {
+                        ForEach(excludedManager.profiles) { profile in
+                            Text(profile.name).tag(profile.id)
+                        }
+                    }
+                    .frame(maxWidth: 200)
+
+                    Spacer()
+
+                    // Profile management buttons
+                    Menu {
+                        Button {
+                            showingNewProfileSheet = true
+                        } label: {
+                            Label("New Profile", systemImage: "plus")
+                        }
+
+                        if let currentProfile = excludedManager.currentProfile {
+                            Button {
+                                excludedManager.duplicateProfile(currentProfile)
+                            } label: {
+                                Label("Duplicate Profile", systemImage: "doc.on.doc")
+                            }
+
+                            Button {
+                                profileToRename = currentProfile
+                                renameProfileName = currentProfile.name
+                                showingRenameSheet = true
+                            } label: {
+                                Label("Rename Profile", systemImage: "pencil")
+                            }
+
+                            Divider()
+
+                            Button(role: .destructive) {
+                                excludedManager.deleteProfile(currentProfile)
+                            } label: {
+                                Label("Delete Profile", systemImage: "trash")
+                            }
+                            .disabled(excludedManager.profiles.count <= 1)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Profile Options")
+                }
+            }
+
+            Divider()
+
             // List of excluded apps
-            if excludedManager.excludedBundleIDs.isEmpty {
+            if excludedManager.currentProfile?.excludedBundleIDs.isEmpty ?? true {
                 VStack(spacing: 12) {
                     Text("No excluded applications")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    
+
                     Text("Click the + button below to add applications")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -595,7 +835,10 @@ struct ExcludeAppsTabView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
-                        ForEach(Array(excludedManager.excludedBundleIDs).sorted(), id: \.self) { bundleID in
+                        ForEach(
+                            Array(excludedManager.currentProfile?.excludedBundleIDs ?? []).sorted(),
+                            id: \.self
+                        ) { bundleID in
                             HStack(spacing: 10) {
                                 if let appInfo = getAppInfo(for: bundleID) {
                                     if let icon = appInfo.icon {
@@ -603,7 +846,7 @@ struct ExcludeAppsTabView: View {
                                             .resizable()
                                             .frame(width: 32, height: 32)
                                     }
-                                    
+
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(appInfo.name)
                                             .font(.body)
@@ -616,7 +859,7 @@ struct ExcludeAppsTabView: View {
                                         .resizable()
                                         .frame(width: 32, height: 32)
                                         .foregroundStyle(.secondary)
-                                    
+
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(bundleID)
                                             .font(.body)
@@ -625,9 +868,9 @@ struct ExcludeAppsTabView: View {
                                             .foregroundStyle(.tertiary)
                                     }
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 Button {
                                     excludedManager.removeExclusion(bundleID)
                                 } label: {
@@ -647,9 +890,9 @@ struct ExcludeAppsTabView: View {
                 }
                 .frame(maxHeight: 450)
             }
-            
+
             Divider()
-            
+
             // Add button
             HStack {
                 Button {
@@ -660,15 +903,75 @@ struct ExcludeAppsTabView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .help("Choose an application to exclude")
-                
+
                 Spacer()
             }
-            
+
             Spacer()
         }
         .padding(20)
+        .sheet(isPresented: $showingNewProfileSheet) {
+            VStack(spacing: 16) {
+                Text("New Profile")
+                    .font(.headline)
+
+                TextField("Profile Name", text: $newProfileName)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button("Cancel") {
+                        showingNewProfileSheet = false
+                        newProfileName = ""
+                    }
+                    .keyboardShortcut(.cancelAction)
+
+                    Button("Create") {
+                        if !newProfileName.isEmpty {
+                            excludedManager.createProfile(name: newProfileName)
+                            showingNewProfileSheet = false
+                            newProfileName = ""
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(newProfileName.isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 300)
+        }
+        .sheet(isPresented: $showingRenameSheet) {
+            VStack(spacing: 16) {
+                Text("Rename Profile")
+                    .font(.headline)
+
+                TextField("Profile Name", text: $renameProfileName)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button("Cancel") {
+                        showingRenameSheet = false
+                        renameProfileName = ""
+                        profileToRename = nil
+                    }
+                    .keyboardShortcut(.cancelAction)
+
+                    Button("Rename") {
+                        if !renameProfileName.isEmpty, let profile = profileToRename {
+                            excludedManager.renameProfile(profile, to: renameProfileName)
+                            showingRenameSheet = false
+                            renameProfileName = ""
+                            profileToRename = nil
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(renameProfileName.isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 300)
+        }
     }
-    
+
     private func openApplicationPicker() {
         let panel = NSOpenPanel()
         panel.title = "Choose Application to Exclude"
@@ -678,35 +981,40 @@ struct ExcludeAppsTabView: View {
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.application]
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        
+
         panel.begin { response in
             guard response == .OK else { return }
-            
+
             for url in panel.urls {
                 if let bundle = Bundle(url: url),
-                   let bundleID = bundle.bundleIdentifier {
+                    let bundleID = bundle.bundleIdentifier
+                {
                     excludedManager.addExclusion(bundleID)
                 }
             }
         }
     }
-    
+
     private func getAppInfo(for bundleID: String) -> (name: String, icon: NSImage?)? {
         // First check running apps
-        if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }) {
+        if let app = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier == bundleID
+        }) {
             return (app.localizedName ?? bundleID, app.icon)
         }
-        
+
         // Then check installed apps
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
-           let bundle = Bundle(url: url) {
-            let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+            let bundle = Bundle(url: url)
+        {
+            let name =
+                bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
                 ?? bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
                 ?? bundleID
             let icon = NSWorkspace.shared.icon(forFile: url.path)
             return (name, icon)
         }
-        
+
         return nil
     }
 }
