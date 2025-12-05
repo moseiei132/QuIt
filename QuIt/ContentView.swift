@@ -9,6 +9,7 @@ import SwiftUI
 import AppKit
 import Combine
 import ServiceManagement
+import UniformTypeIdentifiers
 
 // Model to represent a running app snapshot
 struct RunningApp: Identifiable, Hashable {
@@ -70,7 +71,6 @@ class ExcludedAppsManager: ObservableObject {
 final class RunningAppsModel: ObservableObject {
     @Published var apps: [RunningApp] = []
     @Published var selectedIDs: Set<Int> = []
-    @Published var lastQuitResult: String? = nil
 
     private var observers: [Any] = []
 
@@ -216,14 +216,11 @@ final class RunningAppsModel: ObservableObject {
     // - Process sequentially with small delays
     // - Report remaining apps
     func quitSelectedApps() {
-        lastQuitResult = "Quitting apps..."
-
         // Resolve selected pids to NSRunningApplication instances.
         let selectedPIDs = Set(selectedIDs.map(pid_t.init))
         let targets = NSWorkspace.shared.runningApplications.filter { selectedPIDs.contains($0.processIdentifier) }
         
         guard !targets.isEmpty else {
-            lastQuitResult = "No apps selected."
             return
         }
         
@@ -266,11 +263,9 @@ final class RunningAppsModel: ObservableObject {
             let remaining = targets.filter { stillRunningPIDs.contains($0.processIdentifier) }
             
             if remaining.isEmpty {
-                lastQuitResult = "✅ Successfully quit \(targets.count) app(s)."
                 print("✅ All apps quit successfully")
             } else {
                 let names = remaining.compactMap { $0.localizedName ?? $0.bundleIdentifier }.joined(separator: ", ")
-                lastQuitResult = "⚠️ Some apps did not quit: \(names)\n(They may have unsaved changes or require permission)"
                 print("⚠️ Still running: \(names)")
             }
             
@@ -434,13 +429,6 @@ struct ContentView: View {
                     .controlSize(.small)
                     .help("Quit QuIt")
                 }
-
-                if let result = model.lastQuitResult {
-                    Text(result)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
             }
         }
         .padding(14)
@@ -466,6 +454,7 @@ struct ContentView: View {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
+        // Keep window in memory after closing to avoid memory issues
         window.isReleasedWhenClosed = false
         
         // Center on main screen
@@ -482,7 +471,6 @@ struct ContentView: View {
         }
         
         window.makeKeyAndOrderFront(nil)
-        window.level = .floating
         
         // Keep a reference to prevent deallocation
         WindowManager.shared.settingsWindow = window
@@ -619,12 +607,9 @@ struct AboutTabView: View {
 
 struct ExcludeAppsTabView: View {
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
-    @State private var availableApps: [(bundleID: String, name: String, icon: NSImage?)] = []
-    @State private var searchText = ""
-    @State private var isLoading = true
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Excluded Applications")
                 .font(.headline)
             
@@ -636,21 +621,27 @@ struct ExcludeAppsTabView: View {
             
             // List of excluded apps
             if excludedManager.excludedBundleIDs.isEmpty {
-                Text("No excluded applications")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
+                VStack(spacing: 12) {
+                    Text("No excluded applications")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("Click the + button below to add applications")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 40)
             } else {
                 ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(Array(excludedManager.excludedBundleIDs), id: \.self) { bundleID in
-                            HStack(spacing: 8) {
+                    VStack(spacing: 6) {
+                        ForEach(Array(excludedManager.excludedBundleIDs).sorted(), id: \.self) { bundleID in
+                            HStack(spacing: 10) {
                                 if let appInfo = getAppInfo(for: bundleID) {
                                     if let icon = appInfo.icon {
                                         Image(nsImage: icon)
                                             .resizable()
-                                            .frame(width: 20, height: 20)
+                                            .frame(width: 32, height: 32)
                                     }
                                     
                                     VStack(alignment: .leading, spacing: 2) {
@@ -661,8 +652,18 @@ struct ExcludeAppsTabView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 } else {
-                                    Text(bundleID)
-                                        .font(.body)
+                                    Image(systemName: "app.dashed")
+                                        .resizable()
+                                        .frame(width: 32, height: 32)
+                                        .foregroundStyle(.secondary)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(bundleID)
+                                            .font(.body)
+                                        Text("Not found")
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
                                 
                                 Spacer()
@@ -671,187 +672,77 @@ struct ExcludeAppsTabView: View {
                                     excludedManager.removeExclusion(bundleID)
                                 } label: {
                                     Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 20))
                                         .foregroundStyle(.red)
                                 }
                                 .buttonStyle(.plain)
                                 .help("Remove from exclusion list")
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(Color.gray.opacity(0.1))
-                            .cornerRadius(6)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.gray.opacity(0.08))
+                            .cornerRadius(8)
                         }
                     }
                 }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: 450)
             }
             
             Divider()
             
-            // Add new exclusion
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Add Application to Exclude")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Spacer()
-                    
-                    if isLoading {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 20, height: 20)
-                    }
+            // Add button
+            HStack {
+                Button {
+                    openApplicationPicker()
+                } label: {
+                    Label("Add Application", systemImage: "plus.circle.fill")
+                        .font(.body)
                 }
+                .buttonStyle(.borderedProminent)
+                .help("Choose an application to exclude")
                 
-                TextField("Search applications...", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                
-                if isLoading && availableApps.isEmpty {
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 8) {
-                            ProgressView()
-                            Text("Loading applications...")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 30)
-                        Spacer()
-                    }
-                } else {
-                    ScrollView {
-                        VStack(spacing: 4) {
-                            ForEach(filteredAvailableApps, id: \.bundleID) { app in
-                                HStack(spacing: 8) {
-                                    if let icon = app.icon {
-                                        Image(nsImage: icon)
-                                            .resizable()
-                                            .frame(width: 20, height: 20)
-                                    }
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(app.name)
-                                            .font(.body)
-                                        Text(app.bundleID)
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    if excludedManager.excludedBundleIDs.contains(app.bundleID) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.green)
-                                    } else {
-                                        Button {
-                                            excludedManager.addExclusion(app.bundleID)
-                                        } label: {
-                                            Image(systemName: "plus.circle.fill")
-                                                .foregroundStyle(.blue)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help("Add to exclusion list")
-                                    }
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(Color.gray.opacity(0.05))
-                                .cornerRadius(6)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 300)
-                }
+                Spacer()
             }
+            
+            Spacer()
         }
         .padding(20)
-        .onAppear {
-            if availableApps.isEmpty {
-                loadAvailableApps()
-            }
-        }
     }
     
-    private var filteredAvailableApps: [(bundleID: String, name: String, icon: NSImage?)] {
-        if searchText.isEmpty {
-            return availableApps
-        }
-        return availableApps.filter { app in
-            app.name.localizedCaseInsensitiveContains(searchText) ||
-            app.bundleID.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-    
-    private func loadAvailableApps() {
-        isLoading = true
+    private func openApplicationPicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Application to Exclude"
+        panel.message = "Select an application to exclude from the running apps list"
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
         
-        Task.detached(priority: .userInitiated) {
-            var apps: [(bundleID: String, name: String, icon: NSImage?)] = []
-            let fileManager = FileManager.default
+        panel.begin { response in
+            guard response == .OK else { return }
             
-            // Common application directories
-            let appDirectories = [
-                "/Applications",
-                "/System/Applications",
-                "/System/Library/CoreServices/Applications",
-                "\(NSHomeDirectory())/Applications"
-            ]
-            
-            var foundBundleIDs = Set<String>()
-            
-            for directory in appDirectories {
-                guard let enumerator = fileManager.enumerator(
-                    at: URL(fileURLWithPath: directory),
-                    includingPropertiesForKeys: [.isDirectoryKey, .isApplicationKey],
-                    options: [.skipsHiddenFiles]
-                ) else { continue }
-                
-                while let fileURL = enumerator.nextObject() as? URL {
-                    // Check if it's an app bundle
-                    if fileURL.pathExtension == "app" {
-                        if let bundle = Bundle(url: fileURL),
-                           let bundleID = bundle.bundleIdentifier,
-                           !foundBundleIDs.contains(bundleID),
-                           bundleID != Bundle.main.bundleIdentifier {
-                            
-                            foundBundleIDs.insert(bundleID)
-                            
-                            let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
-                                ?? bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-                                ?? fileURL.deletingPathExtension().lastPathComponent
-                            
-                            let icon = NSWorkspace.shared.icon(forFile: fileURL.path)
-                            
-                            apps.append((bundleID, name, icon))
-                        }
-                        
-                        // Don't traverse into app bundles
-                        enumerator.skipDescendants()
-                    }
+            for url in panel.urls {
+                if let bundle = Bundle(url: url),
+                   let bundleID = bundle.bundleIdentifier {
+                    excludedManager.addExclusion(bundleID)
                 }
-            }
-            
-            // Sort by name
-            apps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            
-            let finalApps = apps
-            await MainActor.run {
-                self.availableApps = finalApps
-                self.isLoading = false
             }
         }
     }
     
     private func getAppInfo(for bundleID: String) -> (name: String, icon: NSImage?)? {
+        // First check running apps
         if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }) {
             return (app.localizedName ?? bundleID, app.icon)
         }
         
-        // Try to get info from installed apps
+        // Then check installed apps
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
            let bundle = Bundle(url: url) {
-            let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String ?? bundleID
+            let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+                ?? bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                ?? bundleID
             let icon = NSWorkspace.shared.icon(forFile: url.path)
             return (name, icon)
         }
