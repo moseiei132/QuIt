@@ -280,6 +280,10 @@ class AutoQuitManager: ObservableObject {
         return appTimeouts.keys.contains(bundleID)
     }
     
+    func getActiveTimerBundleIDs() -> [String] {
+        return Array(appTimers.keys)
+    }
+    
     // MARK: - Event-Driven Monitoring
     
     private func startMonitoring() {
@@ -326,10 +330,24 @@ class AutoQuitManager: ObservableObject {
                 return
             }
             
-            // Schedule timer for this app
-            self.scheduleTimerForApp(bundleID, app: app)
-            self.updateLastActivity()
-            print("⏸️ App deactivated: \(bundleID) - timer scheduled")
+            // Delay slightly to let windows fully close before checking
+            // This prevents scheduling timers for menu bar apps whose windows are still closing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self else { return }
+                
+                // Re-check if app still exists and is still inactive
+                guard let currentApp = NSWorkspace.shared.runningApplications.first(where: {
+                    $0.bundleIdentifier == bundleID
+                }), !currentApp.isActive else {
+                    print("⏭️ Skipping timer for \(bundleID) - app activated or quit")
+                    return
+                }
+                
+                // Schedule timer for this app
+                self.scheduleTimerForApp(bundleID, app: currentApp)
+                self.updateLastActivity()
+                print("⏸️ App deactivated: \(bundleID) - timer check initiated")
+            }
         }
         
         // Listen for app termination (cleanup)
@@ -471,6 +489,19 @@ class AutoQuitManager: ObservableObject {
             return
         }
         
+        // IMPORTANT: Don't schedule timer for menu bar apps with no visible windows
+        // Apps like CleanShot X open windows temporarily but should stay running as menu bar apps
+        if hasNoVisibleWindows(app) {
+            print("⏭️ \(appName) has no visible windows (menu bar app), skipping timer")
+            return
+        }
+        
+        // Also check activation policy - accessory apps are typically menu bar apps
+        if app.activationPolicy == .accessory {
+            print("⏭️ \(appName) is an accessory app (menu bar app), skipping timer")
+            return
+        }
+        
         let timeSinceLastFocus = Date().timeIntervalSince(lastFocusTime)
         let timeUntilQuit = max(0, timeout - timeSinceLastFocus)
         
@@ -509,6 +540,20 @@ class AutoQuitManager: ObservableObject {
             // Check exclusions only if respectExcludeApps is enabled
             if self.respectExcludeApps && excludedManager.isExcluded(bundleID) {
                 print("⚠️ Skipping quit for \(bundleID) - now excluded")
+                self.cancelTimer(for: bundleID)
+                return
+            }
+            
+            // Check if app now has no visible windows (became a menu bar only app)
+            if self.hasNoVisibleWindows(runningApp) {
+                print("⚠️ Skipping quit for \(bundleID) - no visible windows (menu bar app)")
+                self.cancelTimer(for: bundleID)
+                return
+            }
+            
+            // Check if app is an accessory (menu bar) app
+            if runningApp.activationPolicy == .accessory {
+                print("⚠️ Skipping quit for \(bundleID) - accessory/menu bar app")
                 self.cancelTimer(for: bundleID)
                 return
             }
@@ -593,6 +638,50 @@ class AutoQuitManager: ObservableObject {
         DispatchQueue.main.async {
             self.lastActivityTime = Date()
         }
+    }
+    
+    private func hasNoVisibleWindows(_ app: NSRunningApplication) -> Bool {
+        // Use CGWindowListCopyWindowInfo to check if app has any visible windows
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return true
+        }
+        
+        let appPID = app.processIdentifier
+        var windowCount = 0
+        
+        // Check if this app has any on-screen windows
+        for window in windows {
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerPID == appPID else {
+                continue
+            }
+            
+            // Get window properties
+            let layer = window[kCGWindowLayer as String] as? Int ?? 0
+            let alpha = window[kCGWindowAlpha as String] as? CGFloat ?? 0
+            let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+            let width = bounds["Width"] ?? 0
+            let height = bounds["Height"] ?? 0
+            
+            // Filter out:
+            // - Non-normal layers (menu bar items are at layer 25+)
+            // - Invisible windows (alpha == 0)
+            // - Tiny windows (likely status bar items or popups)
+            if layer == 0 && alpha > 0 && width > 100 && height > 100 {
+                windowCount += 1
+            }
+        }
+        
+        // If no substantial windows found, it's likely a menu bar only app
+        let hasWindows = windowCount > 0
+        
+        if !hasWindows {
+            print("   📊 Window check for \(app.localizedName ?? "app"): 0 visible windows (menu bar app)")
+        } else {
+            print("   📊 Window check for \(app.localizedName ?? "app"): \(windowCount) visible window(s)")
+        }
+        
+        return !hasWindows
     }
     
     private func quitApp(_ app: NSRunningApplication) {
