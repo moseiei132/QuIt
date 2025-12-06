@@ -18,212 +18,15 @@ struct ContentView: View {
         VStack(spacing: 12) {
             // First section: Running applications with checkboxes
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 0) {
-                    Text("Running Apps")
-                        .font(.headline)
-                        .opacity(0.9)
-                    Spacer(minLength: 0)
-                    
-                    HStack(spacing: 2) {
-                        Menu {
-                            ForEach(excludedManager.profiles) { profile in
-                                Button {
-                                    excludedManager.selectedProfileID = profile.id
-                                    model.reload()
-                                } label: {
-                                    HStack {
-                                        Text(profile.name)
-                                        if excludedManager.selectedProfileID == profile.id {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(excludedManager.currentProfile?.name ?? "Default")
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                
-                                if let count = excludedManager.currentProfile?.excludedBundleIDs.count, count > 0 {
-                                    Text("(\(count))")
-                                        .font(.caption2)
-                                        .foregroundStyle(.yellow)
-                                }
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .frame(minWidth: 80, maxWidth: 120)
-
-                        Button {
-                            model.reload()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .imageScale(.medium)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Refresh")
-                    }
-                }
-                
-                // Status info (excluded apps and auto-quit)
-                HStack(spacing: 12) {
-                    // Excluded apps info
-                    if let excludedCount = excludedManager.currentProfile?.excludedBundleIDs.count, excludedCount > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "eye.slash")
-                                .font(.caption2)
-                                .foregroundColor(.yellow)
-                            Text("\(excludedCount) app\(excludedCount == 1 ? "" : "s") excluded")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    // Auto-quit status
-                    if autoQuitManager.isEnabled {
-                        HStack(spacing: 6) {
-                            Image(systemName: "timer")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                            
-                            Text("Auto-Quit:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
-                            Text("\(Int(autoQuitManager.defaultTimeout / 60))m")
-                                .font(.caption)
-                                .foregroundStyle(.primary)
-                            
-                            if autoQuitManager.appTimeouts.count > 0 {
-                                Text("(\(autoQuitManager.appTimeouts.count) custom)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                }
-
-                // Select/Deselect All checkbox
-                HStack(spacing: 6) {
-                    Toggle("", isOn: Binding(
-                        get: { model.areAllNonExcludedSelected() },
-                        set: { _ in model.toggleSelectAll() }
-                    ))
-                    .toggleStyle(.checkbox)
-                    .labelsHidden()
-                    
-                    Text("Select All")
-                        .font(.caption)
-                }
-
-                if model.apps.isEmpty {
-                    Text("No running applications found.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 6) {
-                            ForEach(model.apps) { app in
-                                let isExcluded = model.isExcluded(app)
-                                HStack(spacing: 8) {
-                                    // Checkbox (Toggle style)
-                                    Toggle(
-                                        "",
-                                        isOn: Binding(
-                                            get: { model.isSelected(app) },
-                                            set: { _ in model.toggle(app) }
-                                        )
-                                    )
-                                    .toggleStyle(.checkbox)
-                                    .labelsHidden()
-                                    
-                                    // App icon
-                                    Image(nsImage: app.icon ?? NSImage())
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 20, height: 20)
-                                        .cornerRadius(4)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                                        )
-                                        .opacity(isExcluded ? 0.6 : 1.0)
-
-                                    // App name with time info
-                                    HStack(spacing: 4) {
-                                        Text(app.name)
-                                            .font(.body)
-                                            .lineLimit(1)
-                                            .foregroundColor(isExcluded ? .yellow : .primary)
-
-                                        if let lastFocusTime = app.lastFocusTime {
-                                            Text(timeAgoString(from: lastFocusTime))
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-
-                                    Spacer(minLength: 8)
-                                }
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 4)
-                                .background(
-                                    app.isActive
-                                        ? Color.white.opacity(0.08)
-                                        : Color.clear
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    .frame(height: min(280, CGFloat(model.apps.count) * 32 + 12))
-                }
+                headerSection
+                statusSection
+                selectAllSection
+                appsListSection
             }
 
             Divider().opacity(0.6)
 
-            // Footer actions
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Button {
-                        // Quit all selected apps gracefully (normal quit).
-                        model.quitSelectedApps()
-                    } label: {
-                        Label("Quit Apps", systemImage: "xmark.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(model.selectedIDs.isEmpty)
-
-                    Spacer(minLength: 8)
-
-                    Button {
-                        openSettingsWindow()
-                    } label: {
-                        Image(systemName: "gear")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Settings")
-
-                    Button(role: .destructive) {
-                        NSApp.terminate(nil)
-                    } label: {
-                        Image(systemName: "power")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Quit QuIt")
-                }
-            }
+            footerSection
         }
         .padding(14)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -251,6 +54,255 @@ struct ContentView: View {
             }
         }
     }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        HStack(spacing: 0) {
+            Text("Running Apps")
+                .font(.headline)
+                .opacity(0.9)
+            Spacer(minLength: 0)
+            
+            HStack(spacing: 2) {
+                profileMenu
+                refreshButton
+            }
+        }
+    }
+    
+    private var profileMenu: some View {
+        Menu {
+            ForEach(excludedManager.profiles) { profile in
+                Button {
+                    excludedManager.selectedProfileID = profile.id
+                    model.reload()
+                } label: {
+                    HStack {
+                        Text(profile.name)
+                        if excludedManager.selectedProfileID == profile.id {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(excludedManager.currentProfile?.name ?? "Default")
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                
+                if let count = excludedManager.currentProfile?.excludedBundleIDs.count, count > 0 {
+                    Text("(\(count))")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                }
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .frame(minWidth: 80, maxWidth: 120)
+    }
+    
+    private var refreshButton: some View {
+        Button {
+            model.reload()
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .imageScale(.medium)
+        }
+        .buttonStyle(.plain)
+        .help("Refresh")
+    }
+    
+    // MARK: - Status Section
+    private var statusSection: some View {
+        HStack(spacing: 12) {
+            excludedAppsInfo
+            autoQuitStatus
+        }
+    }
+    
+    @ViewBuilder
+    private var excludedAppsInfo: some View {
+        if let excludedCount = excludedManager.currentProfile?.excludedBundleIDs.count, excludedCount > 0 {
+            HStack(spacing: 4) {
+                Image(systemName: "eye.slash")
+                    .font(.caption2)
+                    .foregroundColor(.yellow)
+                Text("\(excludedCount) app\(excludedCount == 1 ? "" : "s") excluded")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var autoQuitStatus: some View {
+        if autoQuitManager.isEnabled {
+            HStack(spacing: 6) {
+                Image(systemName: "timer")
+                    .foregroundColor(.green)
+                    .font(.caption)
+                
+                Text("Auto-Quit:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Text("\(Int(autoQuitManager.defaultTimeout / 60))m")
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                
+                if autoQuitManager.appTimeouts.count > 0 {
+                    Text("(\(autoQuitManager.appTimeouts.count) custom)")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Color.green.opacity(0.1))
+            .cornerRadius(6)
+        }
+    }
+    
+    // MARK: - Select All Section
+    private var selectAllSection: some View {
+        HStack(spacing: 6) {
+            Toggle("", isOn: Binding(
+                get: { model.areAllNonExcludedSelected() },
+                set: { _ in model.toggleSelectAll() }
+            ))
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            
+            Text("Select All")
+                .font(.caption)
+        }
+    }
+    
+    // MARK: - Apps List Section
+    @ViewBuilder
+    private var appsListSection: some View {
+        if model.apps.isEmpty {
+            Text("No running applications found.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.apps) { app in
+                        appRow(app)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(height: min(280, CGFloat(model.apps.count) * 32 + 12))
+        }
+    }
+    
+    private func appRow(_ app: RunningApp) -> some View {
+        let isExcluded = model.isExcluded(app)
+        
+        return HStack(spacing: 8) {
+            // Checkbox
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { model.isSelected(app) },
+                    set: { _ in model.toggle(app) }
+                )
+            )
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            
+            // App icon
+            Image(nsImage: app.icon ?? NSImage())
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 20, height: 20)
+                .cornerRadius(4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                )
+                .opacity(isExcluded ? 0.6 : 1.0)
+
+            // App name with time info
+            HStack(spacing: 4) {
+                Text(app.name)
+                    .font(.body)
+                    .lineLimit(1)
+                    .foregroundColor(isExcluded ? .yellow : .primary)
+
+                if let lastFocusTime = app.lastFocusTime {
+                    appTimeInfo(app: app, lastFocusTime: lastFocusTime)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(
+            app.isActive
+                ? Color.white.opacity(0.08)
+                : Color.clear
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+    
+    @ViewBuilder
+    private func appTimeInfo(app: RunningApp, lastFocusTime: Date) -> some View {
+        if autoQuitManager.isEnabled && !app.isActive, let bundleID = app.bundleIdentifier {
+            // Show countdown timer when auto-quit is enabled
+            let timeRemaining = timeUntilQuit(bundleID: bundleID, lastFocusTime: lastFocusTime)
+            Text(timeUntilQuitString(bundleID: bundleID, lastFocusTime: lastFocusTime))
+                .font(.caption2)
+                .foregroundColor(timeRemaining < 60 ? .red : .orange)
+        } else {
+            // Show time ago when auto-quit is disabled or app is active
+            Text(timeAgoString(from: lastFocusTime))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    // MARK: - Footer Section
+    private var footerSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button {
+                    model.quitSelectedApps()
+                } label: {
+                    Label("Quit Apps", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(model.selectedIDs.isEmpty)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    openSettingsWindow()
+                } label: {
+                    Image(systemName: "gear")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Settings")
+
+                Button(role: .destructive) {
+                    NSApp.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Quit QuIt")
+            }
+        }
+    }
 
     private func autoSelectAll() {
         // Select all non-excluded apps
@@ -272,6 +324,60 @@ struct ContentView: View {
         } else {
             let days = Int(interval / 86400)
             return "\(days)d ago"
+        }
+    }
+    
+    private func timeUntilQuit(bundleID: String, lastFocusTime: Date) -> TimeInterval {
+        // Get the timeout for this app
+        let timeout = autoQuitManager.getTimeout(for: bundleID)
+        
+        // Check if timeout is 0 (never quit)
+        if timeout == 0 {
+            return .infinity
+        }
+        
+        // Check if app should be skipped due to settings
+        let excludedManager = ExcludedAppsManager.shared
+        if autoQuitManager.respectExcludeApps && excludedManager.isExcluded(bundleID) {
+            return .infinity
+        }
+        
+        if autoQuitManager.onlyCustomTimeouts && !autoQuitManager.hasCustomTimeout(for: bundleID) {
+            return .infinity
+        }
+        
+        // Calculate time remaining
+        let timeSinceLastFocus = Date().timeIntervalSince(lastFocusTime)
+        let timeRemaining = max(0, timeout - timeSinceLastFocus)
+        
+        return timeRemaining
+    }
+    
+    private func timeUntilQuitString(bundleID: String, lastFocusTime: Date) -> String {
+        let timeRemaining = timeUntilQuit(bundleID: bundleID, lastFocusTime: lastFocusTime)
+        
+        // Check if app will never be quit
+        if timeRemaining == .infinity {
+            return "Never"
+        }
+        
+        // Format countdown
+        if timeRemaining < 60 {
+            return "\(Int(timeRemaining))s left"
+        } else if timeRemaining < 3600 {
+            let minutes = Int(timeRemaining / 60)
+            return "\(minutes)m left"
+        } else if timeRemaining < 86400 {
+            let hours = Int(timeRemaining / 3600)
+            let minutes = Int((timeRemaining.truncatingRemainder(dividingBy: 3600)) / 60)
+            if minutes > 0 {
+                return "\(hours)h \(minutes)m left"
+            } else {
+                return "\(hours)h left"
+            }
+        } else {
+            let days = Int(timeRemaining / 86400)
+            return "\(days)d left"
         }
     }
     
