@@ -14,11 +14,6 @@ struct GeneralSettingsTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("General Settings")
-                .font(.headline)
-
-            Divider()
-
             VStack(alignment: .leading, spacing: 12) {
                 Text("Startup")
                     .font(.subheadline)
@@ -81,4 +76,3 @@ struct GeneralSettingsTabView: View {
         }
     }
 }
-

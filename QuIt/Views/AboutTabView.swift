@@ -9,58 +9,102 @@ import SwiftUI
 
 struct AboutTabView: View {
     @ObservedObject private var updateChecker = UpdateChecker.shared
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // App Info
                 appInfoSection
-                
+
                 Divider()
-                
+
+                // Links
+                linksSection
+
+                Divider()
+
                 // Update Section
                 updateSection
-                
+
                 Divider()
-                
+
                 // Permissions
                 permissionsSection
-                
+
                 Spacer()
             }
             .padding(20)
         }
     }
-    
+
     // MARK: - App Info Section
     private var appInfoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("About QuIt")
-                .font(.headline)
-            
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text("Version:")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    
+
                     Text(updateChecker.getCurrentVersion())
                         .font(.callout)
                         .fontWeight(.medium)
-                    
+
                     Text("(\(updateChecker.getCurrentBuildNumber()))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
-                
-                Text("QuIt helps you quickly quit multiple applications with smart auto-quit functionality.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(
+                    "QuIt helps you quickly quit multiple applications with smart auto-quit functionality."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
-    
+
+    // MARK: - Links Section
+    private var linksSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // Changelog button
+                Button {
+                    if let url = URL(string: "https://github.com/moseiei132/QuIt/releases") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.text")
+                        Text("Changelog")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .help("View release notes on GitHub")
+
+                // GitHub button
+                Button {
+                    if let url = URL(string: "https://github.com/moseiei132/QuIt") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        // GitHub icon using SF Symbol
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        Text("GitHub")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .help("View project on GitHub")
+            }
+        }
+    }
+
     // MARK: - Update Section
     private var updateSection: some View {
         GroupBox {
@@ -68,37 +112,40 @@ struct AboutTabView: View {
                 Label("Software Update", systemImage: "arrow.down.circle")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                
+
                 Divider()
-                
+
                 VStack(alignment: .leading, spacing: 10) {
                     // Auto-check toggle
-                    Toggle("Automatically check for updates", isOn: Binding(
-                        get: { updateChecker.autoCheckEnabled },
-                        set: { updateChecker.autoCheckEnabled = $0 }
-                    ))
+                    Toggle(
+                        "Automatically check for updates",
+                        isOn: Binding(
+                            get: { updateChecker.autoCheckEnabled },
+                            set: { updateChecker.autoCheckEnabled = $0 }
+                        )
+                    )
                     .toggleStyle(.switch)
                     .font(.subheadline)
-                    
+
                     Text("QuIt will check for updates daily")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                    
+
                     // Last checked
                     if let lastChecked = updateChecker.lastChecked {
                         HStack(spacing: 4) {
                             Image(systemName: "clock")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            
+
                             Text("Last checked: \(formatDate(lastChecked))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    
+
                     Divider()
-                    
+
                     // Check now button
                     HStack {
                         Button {
@@ -112,17 +159,18 @@ struct AboutTabView: View {
                                     Text("Checking...")
                                 }
                             } else {
-                                Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                                Label(
+                                    "Check for Updates", systemImage: "arrow.triangle.2.circlepath")
                             }
                         }
                         .buttonStyle(.bordered)
                         .disabled(updateChecker.isCheckingForUpdates)
-                        
+
                         if updateChecker.updateAvailable {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.circle.fill")
                                     .foregroundStyle(.orange)
-                                
+
                                 Text("Update available")
                                     .font(.caption)
                                     .foregroundStyle(.orange)
@@ -135,52 +183,54 @@ struct AboutTabView: View {
             .padding(12)
         }
     }
-    
+
     // MARK: - Permissions Section
     private var permissionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Permissions")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.shield")
                         .foregroundStyle(.blue)
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Automation")
                             .font(.subheadline)
                             .fontWeight(.medium)
-                        
+
                         Text("Required to quit other applications")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 HStack(spacing: 8) {
                     Image(systemName: "bell.badge")
                         .foregroundStyle(.blue)
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Notifications")
                             .font(.subheadline)
                             .fontWeight(.medium)
-                        
+
                         Text("Optional - for auto-quit alerts")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 Divider()
-                
+
                 Text("Configure in: System Settings → Privacy & Security")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                
+
                 Button {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
+                    if let url = URL(
+                        string: "x-apple.systempreferences:com.apple.preference.security?Privacy")
+                    {
                         NSWorkspace.shared.open(url)
                     }
                 } label: {
@@ -192,7 +242,7 @@ struct AboutTabView: View {
             }
         }
     }
-    
+
     // MARK: - Helper
     private func formatDate(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
@@ -200,4 +250,3 @@ struct AboutTabView: View {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
-
