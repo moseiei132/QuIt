@@ -19,9 +19,6 @@ struct ExcludeAppsTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Excluded Applications")
-                .font(.headline)
-
             Text("Applications in this list will not appear in the running apps list.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -294,4 +291,3 @@ struct ExcludeAppsTabView: View {
         return nil
     }
 }
-

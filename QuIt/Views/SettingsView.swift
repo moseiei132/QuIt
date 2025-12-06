@@ -7,45 +7,77 @@
 
 import SwiftUI
 
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case general = "General"
+    case excludeApps = "Exclude Apps"
+    case autoQuit = "Auto-Quit"
+    case focusTracking = "Focus Tracking"
+    case about = "About"
+
+    var id: String { self.rawValue }
+
+    var icon: String {
+        switch self {
+        case .general:
+            return "gearshape"
+        case .excludeApps:
+            return "eye.slash"
+        case .autoQuit:
+            return "timer"
+        case .focusTracking:
+            return "clock"
+        case .about:
+            return "info.circle"
+        }
+    }
+}
+
 struct SettingsView: View {
-    @State private var selectedTab = 0
+    @State private var selectedSection: SettingsSection? = .general
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Tab View
-            TabView(selection: $selectedTab) {
-                GeneralSettingsTabView()
-                    .tabItem {
-                        Label("General", systemImage: "gearshape")
-                    }
-                    .tag(0)
-
-                AboutTabView()
-                    .tabItem {
-                        Label("About", systemImage: "info.circle")
-                    }
-                    .tag(1)
-
-                ExcludeAppsTabView()
-                    .tabItem {
-                        Label("Exclude Apps", systemImage: "eye.slash")
-                    }
-                    .tag(2)
-                
-                AutoQuitTabView()
-                    .tabItem {
-                        Label("Auto-Quit", systemImage: "timer")
-                    }
-                    .tag(3)
-                
-                FocusTrackingTabView()
-                    .tabItem {
-                        Label("Focus Tracking", systemImage: "clock")
-                    }
-                    .tag(4)
+        NavigationSplitView {
+            // Sidebar
+            List(SettingsSection.allCases, selection: $selectedSection) { section in
+                NavigationLink(value: section) {
+                    Label(section.rawValue, systemImage: section.icon)
+                }
             }
+            .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 250)
+            .listStyle(.sidebar)
+        } detail: {
+            // Detail View
+            Group {
+                if let selectedSection = selectedSection {
+                    switch selectedSection {
+                    case .general:
+                        NavigationStack {
+                            GeneralSettingsTabView()
+                        }
+                    case .focusTracking:
+                        NavigationStack {
+                            FocusTrackingTabView()
+                        }
+                    case .autoQuit:
+                        NavigationStack {
+                            AutoQuitTabView()
+                        }
+                    case .excludeApps:
+                        NavigationStack {
+                            ExcludeAppsTabView()
+                        }
+                    case .about:
+                        NavigationStack {
+                            AboutTabView()
+                        }
+                    }
+                } else {
+                    Text("Select a setting")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .id(selectedSection)
         }
         .frame(width: 800, height: 700)
     }
 }
-

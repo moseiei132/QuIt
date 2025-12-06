@@ -11,67 +11,66 @@ struct FocusTrackingTabView: View {
     @ObservedObject private var focusTracker = AppFocusTracker.shared
     @State private var focusTimesArray: [(bundleID: String, time: Date)] = []
     @State private var refreshTrigger = false
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("App Focus Tracking")
-                .font(.headline)
-            
-            Text("This tracks the last time each application was focused. Data is used for auto-quit features.")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(
+                    "This tracks the last time each application was focused. Data is used for auto-quit features."
+                )
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            
-            Divider()
-            
-            HStack {
-                Text("\(focusTimesArray.count) apps tracked")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                Button {
-                    refreshData()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-                .help("Refresh")
-                
-                Button(role: .destructive) {
-                    focusTracker.clearAllFocusTimes()
-                    refreshData()
-                } label: {
-                    Label("Clear All", systemImage: "trash")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Clear all focus tracking data")
-            }
-            
-            Divider()
-            
-            if focusTimesArray.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "clock.badge.questionmark")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.tertiary)
-                    
-                    Text("No focus data yet")
-                        .font(.callout)
+
+                Divider()
+
+                HStack {
+                    Text("\(focusTimesArray.count) apps tracked")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    
-                    Text("Focus tracking starts automatically when apps become active")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
+
+                    Spacer()
+
+                    Button {
+                        refreshData()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh")
+
+                    Button(role: .destructive) {
+                        focusTracker.clearAllFocusTimes()
+                        refreshData()
+                    } label: {
+                        Label("Clear All", systemImage: "trash")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Clear all focus tracking data")
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 60)
-            } else {
-                ScrollView {
+
+                Divider()
+
+                if focusTimesArray.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.badge.questionmark")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.tertiary)
+
+                        Text("No focus data yet")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
+                        Text("Focus tracking starts automatically when apps become active")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 60)
+                } else {
                     VStack(spacing: 8) {
                         ForEach(focusTimesArray, id: \.bundleID) { item in
                             HStack(spacing: 12) {
@@ -81,7 +80,7 @@ struct FocusTrackingTabView: View {
                                             .resizable()
                                             .frame(width: 32, height: 32)
                                     }
-                                    
+
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(appInfo.name)
                                             .font(.body)
@@ -94,15 +93,15 @@ struct FocusTrackingTabView: View {
                                         .resizable()
                                         .frame(width: 32, height: 32)
                                         .foregroundStyle(.secondary)
-                                    
+
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.bundleID)
                                             .font(.body)
                                     }
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(timeAgoString(from: item.time))
                                         .font(.caption)
@@ -111,7 +110,7 @@ struct FocusTrackingTabView: View {
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
-                                
+
                                 Button {
                                     focusTracker.clearFocusTime(for: item.bundleID)
                                     refreshData()
@@ -130,27 +129,26 @@ struct FocusTrackingTabView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 420)
+
+                Spacer()
             }
-            
-            Spacer()
+            .padding(20)
         }
-        .padding(20)
         .onAppear {
             refreshData()
         }
     }
-    
+
     private func refreshData() {
         let allTimes = focusTracker.getAllFocusTimes()
         focusTimesArray = allTimes.map { (bundleID: $0.key, time: $0.value) }
             .sorted { $0.time > $1.time }  // Most recent first
         refreshTrigger.toggle()
     }
-    
+
     private func timeAgoString(from date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
-        
+
         if interval < 60 {
             return "Just now"
         } else if interval < 3600 {
@@ -164,14 +162,14 @@ struct FocusTrackingTabView: View {
             return "\(days) day\(days == 1 ? "" : "s") ago"
         }
     }
-    
+
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
-    
+
     private func getAppInfo(for bundleID: String) -> (name: String, icon: NSImage?)? {
         // First check running apps
         if let app = NSWorkspace.shared.runningApplications.first(where: {
