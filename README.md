@@ -4,12 +4,11 @@ A macOS menu bar app for quickly quitting multiple applications with smart auto-
 
 ## Screenshots
 <img width="392" height="400" alt="CleanShot 2568-12-06 at 15 54 10" src="https://github.com/user-attachments/assets/a8479da3-a3ad-4e94-ba1b-2cc2f8820c12" />
-<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 04@2x" src="https://github.com/user-attachments/assets/9f649eeb-19fd-41db-8bb5-1d54246feaec" />
-<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 17@2x" src="https://github.com/user-attachments/assets/d682e3fc-f2ee-4080-ad07-bf0d20f69c00" />
-<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 53@2x" src="https://github.com/user-attachments/assets/84c3c571-222e-4fab-870c-30622779a8d5" />
-<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 56 11@2x" src="https://github.com/user-attachments/assets/49e6cb70-20a7-4df0-8da2-ef2a207b42fd" />
-<img width="792" height="404" alt="CleanShot 2568-12-06 at 16 37 23@2x" src="https://github.com/user-attachments/assets/6e04dc26-8ca7-4dea-aa84-8f8850cef005" />
-
+<img width="1824" height="1688" alt="CleanShot 2568-12-07 at 00 44 57@2x" src="https://github.com/user-attachments/assets/dfc75a3d-c4de-4634-8cad-b84c9a5bc8d0" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-07 at 00 45 06@2x" src="https://github.com/user-attachments/assets/cef6e720-ba5e-4294-aad3-3723b706925c" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-07 at 00 45 13@2x" src="https://github.com/user-attachments/assets/46174b47-9b19-414c-a41d-e9f628a832f4" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-07 at 00 45 57@2x" src="https://github.com/user-attachments/assets/baaf0b48-17fe-4436-be6b-a04f110feab2" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-07 at 00 45 35@2x" src="https://github.com/user-attachments/assets/0436cc15-d615-49e4-9b5d-843e5810a48a" />
 
 ## Updates
 
