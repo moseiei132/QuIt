@@ -2,6 +2,14 @@
 
 A macOS menu bar app for quickly quitting multiple applications with smart auto-quit functionality.
 
+## Screenshots
+<img width="392" height="400" alt="CleanShot 2568-12-06 at 15 54 10" src="https://github.com/user-attachments/assets/a8479da3-a3ad-4e94-ba1b-2cc2f8820c12" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 04@2x" src="https://github.com/user-attachments/assets/9f649eeb-19fd-41db-8bb5-1d54246feaec" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 17@2x" src="https://github.com/user-attachments/assets/d682e3fc-f2ee-4080-ad07-bf0d20f69c00" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 53@2x" src="https://github.com/user-attachments/assets/84c3c571-222e-4fab-870c-30622779a8d5" />
+<img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 56 11@2x" src="https://github.com/user-attachments/assets/49e6cb70-20a7-4df0-8da2-ef2a207b42fd" />
+
+
 ## Features
 
 ### Core Features
