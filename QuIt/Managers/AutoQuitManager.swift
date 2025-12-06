@@ -70,6 +70,19 @@ class AutoQuitManager: ObservableObject {
         }
     }
     
+    @Published var onlyCustomTimeouts: Bool = false { // Only auto-quit apps with custom timeout settings
+        didSet {
+            if !isLoading {
+                saveSettings()
+                NotificationCenter.default.post(name: .autoQuitSettingsDidChange, object: nil)
+            }
+            // Reschedule all timers with new mode
+            if isEnabled {
+                rescheduleAllTimers()
+            }
+        }
+    }
+    
     @Published var activeTimersCount: Int = 0
     @Published var lastActivityTime: Date?
     
@@ -78,6 +91,7 @@ class AutoQuitManager: ObservableObject {
     private let defaultTimeoutKey = "autoQuitDefaultTimeout"
     private let appTimeoutsKey = "autoQuitAppTimeouts"
     private let notifyOnAutoQuitKey = "autoQuitNotifyOnAutoQuit"
+    private let onlyCustomTimeoutsKey = "autoQuitOnlyCustomTimeouts"
     
     // Track individual timers per app
     private var appTimers: [String: Timer] = [:]
@@ -176,6 +190,13 @@ class AutoQuitManager: ObservableObject {
             notifyOnAutoQuit = true // Default behavior
         }
         
+        // Load onlyCustomTimeouts, default to false if not set
+        if UserDefaults.standard.object(forKey: onlyCustomTimeoutsKey) != nil {
+            onlyCustomTimeouts = UserDefaults.standard.bool(forKey: onlyCustomTimeoutsKey)
+        } else {
+            onlyCustomTimeouts = false // Default behavior: auto-quit all apps
+        }
+        
         let savedDefaultTimeout = UserDefaults.standard.double(forKey: defaultTimeoutKey)
         if savedDefaultTimeout > 0 {
             defaultTimeout = savedDefaultTimeout
@@ -192,6 +213,7 @@ class AutoQuitManager: ObservableObject {
         print("   - Enabled: \(isEnabled)")
         print("   - Respect exclude apps: \(respectExcludeApps)")
         print("   - Notify on auto-quit: \(notifyOnAutoQuit)")
+        print("   - Only custom timeouts: \(onlyCustomTimeouts)")
         print("   - Default timeout: \(Int(defaultTimeout))s (\(Int(defaultTimeout/60))m)")
         print("   - Custom timeouts: \(appTimeouts.count) apps")
     }
@@ -200,6 +222,7 @@ class AutoQuitManager: ObservableObject {
         UserDefaults.standard.set(isEnabled, forKey: isEnabledKey)
         UserDefaults.standard.set(respectExcludeApps, forKey: respectExcludeAppsKey)
         UserDefaults.standard.set(notifyOnAutoQuit, forKey: notifyOnAutoQuitKey)
+        UserDefaults.standard.set(onlyCustomTimeouts, forKey: onlyCustomTimeoutsKey)
         UserDefaults.standard.set(defaultTimeout, forKey: defaultTimeoutKey)
         
         if let encoded = try? JSONEncoder().encode(appTimeouts) {
@@ -215,6 +238,7 @@ class AutoQuitManager: ObservableObject {
         print("   - Enabled: \(isEnabled)")
         print("   - Respect exclude apps: \(respectExcludeApps)")
         print("   - Notify on auto-quit: \(notifyOnAutoQuit)")
+        print("   - Only custom timeouts: \(onlyCustomTimeouts)")
         print("   - Default timeout: \(Int(defaultTimeout))s")
         print("   - Custom timeouts: \(appTimeouts.count) apps")
     }
@@ -399,6 +423,10 @@ class AutoQuitManager: ObservableObject {
     }
     
     private func scheduleTimerForApp(_ bundleID: String, app: NSRunningApplication) {
+        // IMPORTANT: Always cancel existing timer first before any checks
+        // This ensures timers are properly cleaned up when settings change
+        cancelTimer(for: bundleID)
+        
         guard isEnabled else {
             print("⚠️ Auto-quit disabled, not scheduling timer for \(bundleID)")
             return
@@ -420,14 +448,17 @@ class AutoQuitManager: ObservableObject {
             return
         }
         
+        // If onlyCustomTimeouts mode is enabled, only auto-quit apps with custom timeout settings
+        if onlyCustomTimeouts && !hasCustomTimeout(for: bundleID) {
+            print("⚠️ \(bundleID) has no custom timeout (onlyCustomTimeouts mode), skipping")
+            return
+        }
+        
         // Get last focus time
         guard let lastFocusTime = focusTracker.getLastFocusTime(for: bundleID) else {
             print("⚠️ No focus time for \(bundleID), skipping timer")
             return
         }
-        
-        // Cancel existing timer if any
-        cancelTimer(for: bundleID)
         
         // Calculate time until quit
         let timeout = getTimeout(for: bundleID)
@@ -508,14 +539,48 @@ class AutoQuitManager: ObservableObject {
             $0.bundleIdentifier == bundleID && !$0.isActive
         }) {
             scheduleTimerForApp(bundleID, app: app)
+        } else {
+            // App is no longer running or is now active, cancel its timer
+            cancelTimer(for: bundleID)
         }
     }
     
     private func rescheduleAllTimers() {
+        print("🔄 Reschedulating all timers based on updated settings...")
+        
+        // Get all apps that currently have timers
         let currentTimers = Array(appTimers.keys)
-        for bundleID in currentTimers {
-            rescheduleTimerForApp(bundleID)
+        
+        // Get all currently running inactive apps
+        let currentPID = NSRunningApplication.current.processIdentifier
+        let inactiveApps = NSWorkspace.shared.runningApplications.filter {
+            $0.processIdentifier != currentPID && 
+            $0.activationPolicy == .regular && 
+            !$0.isActive &&
+            $0.bundleIdentifier != nil
         }
+        
+        // Combine both lists to ensure we check all relevant apps
+        var allBundleIDs = Set(currentTimers)
+        for app in inactiveApps {
+            if let bundleID = app.bundleIdentifier {
+                allBundleIDs.insert(bundleID)
+            }
+        }
+        
+        // Reschedule or cancel each app's timer based on current settings
+        for bundleID in allBundleIDs {
+            if let app = NSWorkspace.shared.runningApplications.first(where: {
+                $0.bundleIdentifier == bundleID && !$0.isActive
+            }) {
+                scheduleTimerForApp(bundleID, app: app)
+            } else {
+                // App is no longer running or is now active, cancel its timer
+                cancelTimer(for: bundleID)
+            }
+        }
+        
+        print("✅ Rescheduled all timers. Active timers: \(appTimers.count)")
     }
     
     private func updateTimersCount() {

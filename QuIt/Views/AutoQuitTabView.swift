@@ -17,12 +17,15 @@ struct AutoQuitTabView: View {
     @State private var customTimeout: TimeInterval = 300
     
     var body: some View {
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .top, spacing: 12) {
             leftSettingsSection
+            
             Divider()
+            
             rightAppListSection
         }
-        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(12)
         .sheet(isPresented: $showingAddAppSheet) {
             customTimeoutSheet
         }
@@ -30,16 +33,10 @@ struct AutoQuitTabView: View {
     
     // MARK: - Left Settings Section
     private var leftSettingsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-                Text("Auto-Quit Settings")
-                    .font(.headline)
-                
-                Text("All running apps will be auto-quit after the default timeout. Set custom timeouts for specific apps, or set to 0 to never quit.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Divider()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                headerSection
                 
                 // Enable/Disable toggle
                 Toggle("Enable Auto-Quit", isOn: $autoQuitManager.isEnabled)
@@ -47,104 +44,312 @@ struct AutoQuitTabView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
-                // Respect Exclude Apps toggle
                 if autoQuitManager.isEnabled {
-                    Toggle("Respect Exclude Apps", isOn: $autoQuitManager.respectExcludeApps)
-                        .toggleStyle(.switch)
-                        .font(.subheadline)
-                        .padding(.leading, 20)
+                    // Behavior Settings
+                    behaviorSettingsGroup
                     
-                    Text("When enabled, apps in the exclude list won't be auto-quit")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.leading, 20)
-                }
-                
-                // Exclude Profile selector
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Exclude Profile:")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        Picker(
-                            "",
-                            selection: Binding(
-                                get: {
-                                    excludedManager.selectedProfileID ?? excludedManager.profiles.first?.id ?? UUID()
-                                },
-                                set: { excludedManager.selectedProfileID = $0 }
-                            )
-                        ) {
-                            ForEach(excludedManager.profiles) { profile in
-                                Text(profile.name).tag(profile.id)
-                            }
-                        }
-                        .frame(maxWidth: 200)
-                        
-                        Spacer()
-                    }
+                    // Timeout Settings
+                    timeoutSettingsGroup
                     
-                    if let profile = excludedManager.currentProfile {
-                        Text("\(profile.excludedBundleIDs.count) app\(profile.excludedBundleIDs.count == 1 ? "" : "s") excluded from auto-quit")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                if autoQuitManager.isEnabled {
-                    defaultTimeoutSection
-                    .padding(.leading, 20)
-                    
-                    activeTimersStatusSection
+                    // Status & Monitoring
+                    statusMonitoringGroup
                 }
                 
                 Spacer()
             }
-            .frame(width: 400)
+            .padding(12)
+        }
+        .frame(minWidth: 320, idealWidth: 360, maxWidth: 380)
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Auto-Quit Settings")
+                .font(.headline)
+            
+            Text("Automatically quit inactive apps after a configured timeout period.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    
+    // MARK: - Behavior Settings Group
+    private var behaviorSettingsGroup: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Behavior", systemImage: "gearshape.2")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    // Respect Exclude Apps
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Respect Exclude Apps", isOn: $autoQuitManager.respectExcludeApps)
+                            .toggleStyle(.switch)
+                            .font(.subheadline)
+                        
+                        Text("Skip apps in the exclude list")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    // Only Custom Timeouts
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Only Custom Timeouts", isOn: $autoQuitManager.onlyCustomTimeouts)
+                            .toggleStyle(.switch)
+                            .font(.subheadline)
+                        
+                        Text("Auto-quit only apps with custom timeout settings")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    // Notify on Auto-Quit
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Show Notifications", isOn: $autoQuitManager.notifyOnAutoQuit)
+                            .toggleStyle(.switch)
+                            .font(.subheadline)
+                        
+                        Text("Notify when an app is automatically quit")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(10)
+        }
+    }
+    
+    // MARK: - Timeout Settings Group
+    private var timeoutSettingsGroup: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Timeout Settings", systemImage: "timer")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    // Default Timeout
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Default Quit Timeout")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        TimeoutControlsView(
+                            timeout: $autoQuitManager.defaultTimeout,
+                            minimumValue: 60
+                        )
+                        
+                        if autoQuitManager.onlyCustomTimeouts {
+                            Text("Base value for custom timeouts")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text("Applied to all apps without custom settings")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    
+                    // Exclude Profile
+                    if autoQuitManager.respectExcludeApps {
+                        Divider()
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Exclude Profile")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            Picker("", selection: Binding(
+                                get: {
+                                    excludedManager.selectedProfileID ?? excludedManager.profiles.first?.id ?? UUID()
+                                },
+                                set: { excludedManager.selectedProfileID = $0 }
+                            )) {
+                                ForEach(excludedManager.profiles) { profile in
+                                    Text(profile.name).tag(profile.id)
+                                }
+                            }
+                            .labelsHidden()
+                            
+                            if let profile = excludedManager.currentProfile {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.shield")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    
+                                    Text("\(profile.excludedBundleIDs.count) app\(profile.excludedBundleIDs.count == 1 ? "" : "s") excluded")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(10)
+        }
+    }
+    
+    // MARK: - Status & Monitoring Group
+    private var statusMonitoringGroup: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Status & Monitoring", systemImage: "chart.line.uptrend.xyaxis")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    // Active Timers
+                    HStack(spacing: 8) {
+                        Image(systemName: "timer")
+                            .font(.body)
+                            .foregroundStyle(autoQuitManager.activeTimersCount > 0 ? .green : .secondary)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Active Timers")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            HStack(spacing: 4) {
+                                Text("\(autoQuitManager.activeTimersCount)")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                
+                                Text(autoQuitManager.activeTimersCount == 1 ? "app" : "apps")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    
+                    // Last Activity
+                    if let lastActivity = autoQuitManager.lastActivityTime {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Last Activity")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                
+                                Text(timeAgoString(from: lastActivity))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    // Debug Button
+                    Button {
+                        printDebugInfo()
+                    } label: {
+                        Label("Show Debug Info", systemImage: "ant.circle")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    
+                    // Debug Tips
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("• Event-driven timers fire precisely at timeout")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        
+                        Text("• Check Console.app for detailed logs")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(10)
+        }
     }
     
     // MARK: - Right App List Section
     private var rightAppListSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                    Text(autoQuitManager.respectExcludeApps ? "Per-App Timeouts & Excluded Apps" : "Per-App Timeouts")
+            // Header
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Label(autoQuitManager.respectExcludeApps ? "Per-App Timeouts & Exclusions" : "Per-App Timeouts", 
+                          systemImage: "app.badge.checkmark")
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .fontWeight(.semibold)
                     
-                    if autoQuitManager.respectExcludeApps {
-                        Text("All apps use default timeout unless listed below. Set timeout to 0 to never quit. Excluded apps won't be auto-quit.")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        Text("All apps use default timeout unless listed below. Set timeout to 0 to never quit.")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    
+                    // Add button
+                    Button {
+                        openApplicationPicker()
+                    } label: {
+                        Label("Add", systemImage: "plus.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .font(.title3)
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                    .help("Add custom timeout for an app")
                 }
+                
+                if autoQuitManager.onlyCustomTimeouts {
+                    Text("Only these apps will be auto-quit. Set to 0 to never quit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if autoQuitManager.respectExcludeApps {
+                    Text("Custom timeouts override the default. Excluded apps won't be auto-quit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Custom timeouts override the default. Set to 0 to never quit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
             
+            Divider()
+            
+            // App List
             ScrollView {
                 VStack(spacing: 6) {
                     let customTimeoutApps = autoQuitManager.appTimeouts.keys.sorted()
-                    // Only include excluded apps if respectExcludeApps is enabled
                     let excludedApps = autoQuitManager.respectExcludeApps ? Array(ExcludedAppsManager.shared.excludedBundleIDs).sorted() : []
                     let allBundleIDs = Set(customTimeoutApps + excludedApps).sorted()
                     
                     if allBundleIDs.isEmpty {
-                        VStack(spacing: 12) {
-                            Text("No custom timeouts\(autoQuitManager.respectExcludeApps ? " or exclusions" : "")")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            
-                            Text("Add custom timeouts\(autoQuitManager.respectExcludeApps ? " or excluded apps" : "") to see them here")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 40)
+                        emptyStateView
                     } else {
                         ForEach(allBundleIDs, id: \.self) { bundleID in
                             let isExcluded = ExcludedAppsManager.shared.isExcluded(bundleID)
@@ -160,121 +365,48 @@ struct AutoQuitTabView: View {
                         }
                     }
                 }
-            }
-            .frame(maxHeight: 500)
-            
-            // Add button
-            HStack {
-                Button {
-                    openApplicationPicker()
-                } label: {
-                    Label("Add App Timeout", systemImage: "plus.circle.fill")
-                        .font(.body)
-                }
-                .buttonStyle(.borderedProminent)
-                .help("Set a custom timeout for an app")
-                
-                Spacer()
-            }
-            
-            Spacer()
-        }
-        .frame(minWidth: 350)
-    }
-    
-    // MARK: - Default Timeout Section
-    private var defaultTimeoutSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Default Quit Timeout")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                TimeoutControlsView(
-                    timeout: $autoQuitManager.defaultTimeout,
-                    minimumValue: 60
-                )
-                
-                Text("Quit apps after this period of inactivity (minimum 1 minute)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
             }
         }
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(8)
+        .frame(minWidth: 280, idealWidth: 360, maxWidth: .infinity)
     }
     
-    // MARK: - Active Timers Status Section
-    private var activeTimersStatusSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "timer")
-                    .font(.caption)
-                    .foregroundStyle(autoQuitManager.activeTimersCount > 0 ? .green : .secondary)
-                
-                Text("Active Timers:")
-                    .font(.caption)
+    // MARK: - Empty State View
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "app.dashed")
+                .font(.system(size: 48))
+                .foregroundStyle(.tertiary)
+            
+            VStack(spacing: 8) {
+                Text("No Custom Timeouts")
+                    .font(.headline)
                     .foregroundStyle(.secondary)
                 
-                Text("\(autoQuitManager.activeTimersCount)")
+                Text("Click the + button above to add custom timeouts\(autoQuitManager.respectExcludeApps ? " or manage exclusions in the Exclude Apps tab" : "")")
                     .font(.caption)
-                    .foregroundStyle(.primary)
-                    .fontWeight(.medium)
-                
-                Text(autoQuitManager.activeTimersCount == 1 ? "app" : "apps")
-                    .font(.caption2)
                     .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 280)
             }
-            .padding(.leading, 20)
-            
-            if let lastActivity = autoQuitManager.lastActivityTime {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
-                    Text("Last Activity:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
-                    Text(formatLastCheckTime(lastActivity))
-                        .font(.caption)
-                        .foregroundStyle(.primary)
-                    
-                    Text("(\(timeAgoString(from: lastActivity)))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.leading, 20)
-            }
-            
-            Button {
-                printDebugInfo()
-            } label: {
-                Label("Show Debug Info", systemImage: "ant.circle")
-                    .font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .padding(.leading, 20)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Event-driven: timers trigger precisely when apps reach timeout")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                
-                Text("Check Console.app for detailed logs (search for 'QuIt' or '⏰')")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.leading, 20)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
     }
+    
     
     // MARK: - Custom Timeout Sheet
     private var customTimeoutSheet: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 16) {
+        VStack(spacing: 20) {
+            // Header
+            VStack(spacing: 12) {
                 Text("Set Custom Timeout")
-                    .font(.headline)
+                    .font(.title2)
+                    .fontWeight(.semibold)
                 
                 if let bundleID = selectedBundleID,
                    let appInfo = getAppInfo(for: bundleID) {
@@ -282,84 +414,113 @@ struct AutoQuitTabView: View {
                         if let icon = appInfo.icon {
                             Image(nsImage: icon)
                                 .resizable()
-                                .frame(width: 48, height: 48)
+                                .frame(width: 56, height: 56)
+                                .cornerRadius(8)
                         }
                         
-                        VStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(appInfo.name)
                                 .font(.headline)
                             Text(bundleID)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        
+                        Spacer()
                     }
-                    .padding(.vertical, 8)
+                    .padding(12)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(8)
                 }
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    // Never quit toggle
+            }
+            
+            Divider()
+            
+            // Settings
+            VStack(alignment: .leading, spacing: 16) {
+                // Never quit toggle
+                GroupBox {
                     Toggle(isOn: Binding(
                         get: { customTimeout == 0 },
                         set: { isNever in
                             if isNever {
                                 customTimeout = 0
                             } else {
-                                customTimeout = 300 // Default to 5 minutes when turning off "never"
+                                customTimeout = 300
                             }
                         }
                     )) {
-                        HStack(spacing: 6) {
-                            Text("Never quit this app")
-                                .font(.subheadline)
+                        HStack(spacing: 8) {
+                            Image(systemName: customTimeout == 0 ? "infinity.circle.fill" : "infinity.circle")
+                                .foregroundStyle(customTimeout == 0 ? .green : .secondary)
                             
-                            if customTimeout == 0 {
-                                Image(systemName: "infinity.circle.fill")
-                                    .foregroundStyle(.green)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Never quit this app")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                
+                                Text("App will never be automatically quit")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                     }
                     .toggleStyle(.switch)
-                    
-                    if customTimeout > 0 {
-                        Divider()
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Timeout Duration")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                }
+                
+                // Timeout duration
+                if customTimeout > 0 {
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "timer")
+                                    .foregroundStyle(.secondary)
+                                
+                                Text("Timeout Duration")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
                             
                             TimeoutControlsView(
                                 timeout: $customTimeout,
                                 minimumValue: 60
                             )
                             
-                            Text("Minimum 1 minute when not set to \"Never\"")
-                                .font(.caption2)
+                            Text("Minimum 1 minute")
+                                .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
                     }
                 }
+            }
+            
+            Divider()
+            
+            // Actions
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    showingAddAppSheet = false
+                    selectedBundleID = nil
+                }
+                .keyboardShortcut(.cancelAction)
+                .controlSize(.large)
                 
-                HStack {
-                    Button("Cancel") {
+                Spacer()
+                
+                Button("Set Timeout") {
+                    if let bundleID = selectedBundleID {
+                        autoQuitManager.setTimeout(for: bundleID, timeout: customTimeout)
                         showingAddAppSheet = false
                         selectedBundleID = nil
                     }
-                    .keyboardShortcut(.cancelAction)
-                    
-                    Button("Set") {
-                        if let bundleID = selectedBundleID {
-                            autoQuitManager.setTimeout(for: bundleID, timeout: customTimeout)
-                            showingAddAppSheet = false
-                            selectedBundleID = nil
-                        }
-                    }
-                    .keyboardShortcut(.defaultAction)
                 }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-            .padding(24)
-            .frame(width: 420)
         }
+        .padding(24)
+        .frame(width: 460)
     }
     
     private func printDebugInfo() {
@@ -373,6 +534,7 @@ struct AutoQuitTabView: View {
         print("\n📊 Configuration:")
         print("  ✓ Auto-Quit Enabled: \(autoQuitManager.isEnabled)")
         print("  ✓ Respect Exclude Apps: \(autoQuitManager.respectExcludeApps)")
+        print("  ✓ Only Custom Timeouts: \(autoQuitManager.onlyCustomTimeouts)")
         print("  ✓ Default Timeout: \(Int(autoQuitManager.defaultTimeout))s (\(Int(autoQuitManager.defaultTimeout/60))m)")
         print("  ✓ Custom Timeouts: \(autoQuitManager.appTimeouts.count)")
         print("  ✓ Active Timers: \(autoQuitManager.activeTimersCount)")
@@ -390,13 +552,17 @@ struct AutoQuitTabView: View {
             let isActive = app.isActive ? "✅ ACTIVE" : "⏸️  INACTIVE"
             let isExcluded = excludedManager.isExcluded(bundleID)
             let timeout = autoQuitManager.getTimeout(for: bundleID)
+            let hasCustomTimeout = autoQuitManager.hasCustomTimeout(for: bundleID)
             
             print("  • \(appName)")
             print("      Status: \(isActive)")
             print("      Bundle: \(bundleID)")
             print("      Excluded: \(isExcluded ? "YES ⚠️" : "NO")")
+            print("      Has Custom Timeout: \(hasCustomTimeout ? "YES" : "NO")")
             
-            let willBeSkipped = (isExcluded && autoQuitManager.respectExcludeApps) || timeout == 0
+            let willBeSkipped = (isExcluded && autoQuitManager.respectExcludeApps) 
+                || timeout == 0 
+                || (autoQuitManager.onlyCustomTimeouts && !hasCustomTimeout)
             
             if timeout == 0 {
                 print("      Timeout: NEVER (0s) ⏭️")
@@ -407,8 +573,10 @@ struct AutoQuitTabView: View {
             if willBeSkipped {
                 if isExcluded && autoQuitManager.respectExcludeApps {
                     print("      Will Be Auto-Quit: NO (excluded)")
-                } else {
+                } else if timeout == 0 {
                     print("      Will Be Auto-Quit: NO (timeout=0)")
+                } else if autoQuitManager.onlyCustomTimeouts && !hasCustomTimeout {
+                    print("      Will Be Auto-Quit: NO (only custom timeouts mode)")
                 }
             } else {
                 print("      Will Be Auto-Quit: YES")
@@ -435,21 +603,6 @@ struct AutoQuitTabView: View {
         print("  - Check Console.app for real-time logs")
         print("  - Look for '⏰' emoji in logs to see timer events")
         print(String(repeating: "=", count: 60) + "\n")
-    }
-    
-    private func formatInterval(_ interval: TimeInterval) -> String {
-        let minutes = Int(interval / 60)
-        if minutes < 60 {
-            return "\(minutes) minute\(minutes == 1 ? "" : "s")"
-        } else {
-            let hours = minutes / 60
-            let remainingMinutes = minutes % 60
-            if remainingMinutes == 0 {
-                return "\(hours) hour\(hours == 1 ? "" : "s")"
-            } else {
-                return "\(hours)h \(remainingMinutes)m"
-            }
-        }
     }
     
     private func openApplicationPicker() {
@@ -495,13 +648,6 @@ struct AutoQuitTabView: View {
         }
         
         return nil
-    }
-    
-    private func formatLastCheckTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .medium
-        return formatter.string(from: date)
     }
     
     private func timeAgoString(from date: Date) -> String {
