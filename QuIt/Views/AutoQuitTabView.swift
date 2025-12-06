@@ -13,6 +13,7 @@ struct AutoQuitTabView: View {
     @ObservedObject private var autoQuitManager = AutoQuitManager.shared
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
     @State private var showingAddAppSheet = false
+    @State private var showingActiveTimersSheet = false
     @State private var selectedBundleID: String?
     @State private var customTimeout: TimeInterval = 300
     
@@ -28,6 +29,9 @@ struct AutoQuitTabView: View {
         .padding(12)
         .sheet(isPresented: $showingAddAppSheet) {
             customTimeoutSheet
+        }
+        .sheet(isPresented: $showingActiveTimersSheet) {
+            activeTimersSheet
         }
     }
     
@@ -239,6 +243,19 @@ struct AutoQuitTabView: View {
                         }
                         
                         Spacer()
+                        
+                        // Show Active Timers button
+                        if autoQuitManager.activeTimersCount > 0 {
+                            Button {
+                                showingActiveTimersSheet = true
+                            } label: {
+                                Image(systemName: "eye")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .help("Show apps with active timers")
+                        }
                     }
                     
                     // Last Activity
@@ -521,6 +538,143 @@ struct AutoQuitTabView: View {
         }
         .padding(24)
         .frame(width: 460)
+    }
+    
+    // MARK: - Active Timers Sheet
+    private var activeTimersSheet: some View {
+        VStack(spacing: 20) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Active Timers")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Text("\(autoQuitManager.activeTimersCount) app\(autoQuitManager.activeTimersCount == 1 ? "" : "s") will be auto-quit when inactive")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                Button {
+                    showingActiveTimersSheet = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            Divider()
+            
+            // Apps list
+            ScrollView {
+                VStack(spacing: 8) {
+                    let activeBundleIDs = autoQuitManager.getActiveTimerBundleIDs()
+                    
+                    if activeBundleIDs.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "timer.slash")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.tertiary)
+                            
+                            Text("No Active Timers")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+                            
+                            Text("Apps will appear here when they become inactive")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else {
+                        ForEach(activeBundleIDs.sorted(), id: \.self) { bundleID in
+                            activeTimerRow(bundleID: bundleID)
+                        }
+                    }
+                }
+                .padding(12)
+            }
+            .frame(maxHeight: 400)
+        }
+        .padding(24)
+        .frame(width: 500)
+    }
+    
+    private func activeTimerRow(bundleID: String) -> some View {
+        let focusTracker = AppFocusTracker.shared
+        let appInfo = getAppInfo(for: bundleID)
+        let timeout = autoQuitManager.getTimeout(for: bundleID)
+        
+        let timeRemaining: TimeInterval = {
+            guard let lastFocusTime = focusTracker.getLastFocusTime(for: bundleID) else {
+                return 0
+            }
+            let elapsed = Date().timeIntervalSince(lastFocusTime)
+            return max(0, timeout - elapsed)
+        }()
+        
+        return HStack(spacing: 12) {
+            // App icon
+            if let icon = appInfo?.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 32, height: 32)
+                    .cornerRadius(6)
+            } else {
+                Image(systemName: "app")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+            }
+            
+            // App name and bundle ID
+            VStack(alignment: .leading, spacing: 2) {
+                Text(appInfo?.name ?? bundleID)
+                    .font(.body)
+                    .fontWeight(.medium)
+                
+                Text(bundleID)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            // Time remaining
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(formatTimeRemaining(timeRemaining))
+                    .font(.headline)
+                    .foregroundColor(timeRemaining < 60 ? .red : (timeRemaining < 300 ? .orange : .green))
+                
+                Text("remaining")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(8)
+    }
+    
+    private func formatTimeRemaining(_ seconds: TimeInterval) -> String {
+        if seconds < 60 {
+            return "\(Int(seconds))s"
+        } else if seconds < 3600 {
+            let minutes = Int(seconds / 60)
+            let secs = Int(seconds.truncatingRemainder(dividingBy: 60))
+            return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m"
+        } else if seconds < 86400 {
+            let hours = Int(seconds / 3600)
+            let minutes = Int((seconds.truncatingRemainder(dividingBy: 3600)) / 60)
+            return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
+        } else {
+            let days = Int(seconds / 86400)
+            return "\(days)d"
+        }
     }
     
     private func printDebugInfo() {
