@@ -8,6 +8,7 @@ A macOS menu bar app for quickly quitting multiple applications with smart auto-
 <img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 17@2x" src="https://github.com/user-attachments/assets/d682e3fc-f2ee-4080-ad07-bf0d20f69c00" />
 <img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 55 53@2x" src="https://github.com/user-attachments/assets/84c3c571-222e-4fab-870c-30622779a8d5" />
 <img width="1824" height="1688" alt="CleanShot 2568-12-06 at 15 56 11@2x" src="https://github.com/user-attachments/assets/49e6cb70-20a7-4df0-8da2-ef2a207b42fd" />
+<img width="792" height="404" alt="CleanShot 2568-12-06 at 16 37 23@2x" src="https://github.com/user-attachments/assets/6e04dc26-8ca7-4dea-aa84-8f8850cef005" />
 
 
 ## Features
