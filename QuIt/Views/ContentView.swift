@@ -40,7 +40,7 @@ struct ContentView: View {
             model.reload()
             // Auto-select all non-excluded apps after a brief delay
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                try? await Task.sleep(nanoseconds: 50_000_000)  // 0.05s
                 autoSelectAll()
             }
         }
@@ -49,12 +49,12 @@ struct ContentView: View {
             model.reload()
             // Auto-select all non-excluded apps after a brief delay
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                try? await Task.sleep(nanoseconds: 50_000_000)  // 0.05s
                 autoSelectAll()
             }
         }
     }
-    
+
     // MARK: - Header Section
     private var headerSection: some View {
         HStack(spacing: 0) {
@@ -62,14 +62,14 @@ struct ContentView: View {
                 .font(.headline)
                 .opacity(0.9)
             Spacer(minLength: 0)
-            
+
             HStack(spacing: 2) {
                 profileMenu
                 refreshButton
             }
         }
     }
-    
+
     private var profileMenu: some View {
         Menu {
             ForEach(excludedManager.profiles) { profile in
@@ -91,7 +91,7 @@ struct ContentView: View {
                     .font(.caption)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                
+
                 if let count = excludedManager.currentProfile?.excludedBundleIDs.count, count > 0 {
                     Text("(\(count))")
                         .font(.caption2)
@@ -103,7 +103,7 @@ struct ContentView: View {
         .controlSize(.small)
         .frame(minWidth: 80, maxWidth: 120)
     }
-    
+
     private var refreshButton: some View {
         Button {
             model.reload()
@@ -114,7 +114,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .help("Refresh")
     }
-    
+
     // MARK: - Status Section
     private var statusSection: some View {
         HStack(spacing: 12) {
@@ -122,10 +122,12 @@ struct ContentView: View {
             autoQuitStatus
         }
     }
-    
+
     @ViewBuilder
     private var excludedAppsInfo: some View {
-        if let excludedCount = excludedManager.currentProfile?.excludedBundleIDs.count, excludedCount > 0 {
+        if let excludedCount = excludedManager.currentProfile?.excludedBundleIDs.count,
+            excludedCount > 0
+        {
             HStack(spacing: 4) {
                 Image(systemName: "eye.slash")
                     .font(.caption2)
@@ -136,7 +138,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private var autoQuitStatus: some View {
         if autoQuitManager.isEnabled {
@@ -144,15 +146,15 @@ struct ContentView: View {
                 Image(systemName: "timer")
                     .foregroundColor(.green)
                     .font(.caption)
-                
+
                 Text("Auto-Quit:")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                
+
                 Text("\(Int(autoQuitManager.defaultTimeout / 60))m")
                     .font(.caption)
                     .foregroundStyle(.primary)
-                
+
                 if autoQuitManager.appTimeouts.count > 0 {
                     Text("(\(autoQuitManager.appTimeouts.count) custom)")
                         .font(.caption2)
@@ -165,22 +167,25 @@ struct ContentView: View {
             .cornerRadius(6)
         }
     }
-    
+
     // MARK: - Select All Section
     private var selectAllSection: some View {
         HStack(spacing: 6) {
-            Toggle("", isOn: Binding(
-                get: { model.areAllNonExcludedSelected() },
-                set: { _ in model.toggleSelectAll() }
-            ))
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { model.areAllNonExcludedSelected() },
+                    set: { _ in model.toggleSelectAll() }
+                )
+            )
             .toggleStyle(.checkbox)
             .labelsHidden()
-            
+
             Text("Select All")
                 .font(.caption)
         }
     }
-    
+
     // MARK: - Apps List Section
     @ViewBuilder
     private var appsListSection: some View {
@@ -200,10 +205,10 @@ struct ContentView: View {
             .frame(height: min(280, CGFloat(model.apps.count) * 32 + 12))
         }
     }
-    
+
     private func appRow(_ app: RunningApp) -> some View {
         let isExcluded = model.isExcluded(app)
-        
+
         return HStack(spacing: 8) {
             // Checkbox
             Toggle(
@@ -215,7 +220,7 @@ struct ContentView: View {
             )
             .toggleStyle(.checkbox)
             .labelsHidden()
-            
+
             // App icon
             Image(nsImage: app.icon ?? NSImage())
                 .resizable()
@@ -251,7 +256,7 @@ struct ContentView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
-    
+
     @ViewBuilder
     private func appTimeInfo(app: RunningApp, lastFocusTime: Date) -> some View {
         if autoQuitManager.isEnabled && !app.isActive, let bundleID = app.bundleIdentifier {
@@ -267,7 +272,7 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
         }
     }
-    
+
     // MARK: - Footer Section
     private var footerSection: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -307,12 +312,13 @@ struct ContentView: View {
     private func autoSelectAll() {
         // Select all non-excluded apps
         let excludedManager = ExcludedAppsManager.shared
-        model.selectedIDs = Set(model.apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }.map { $0.id })
+        model.selectedIDs = Set(
+            model.apps.filter { !excludedManager.isExcluded($0.bundleIdentifier) }.map { $0.id })
     }
-    
+
     private func timeAgoString(from date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
-        
+
         if interval < 60 {
             return "Just now"
         } else if interval < 3600 {
@@ -326,41 +332,41 @@ struct ContentView: View {
             return "\(days)d ago"
         }
     }
-    
+
     private func timeUntilQuit(bundleID: String, lastFocusTime: Date) -> TimeInterval {
         // Get the timeout for this app
         let timeout = autoQuitManager.getTimeout(for: bundleID)
-        
+
         // Check if timeout is 0 (never quit)
         if timeout == 0 {
             return .infinity
         }
-        
+
         // Check if app should be skipped due to settings
         let excludedManager = ExcludedAppsManager.shared
         if autoQuitManager.respectExcludeApps && excludedManager.isExcluded(bundleID) {
             return .infinity
         }
-        
+
         if autoQuitManager.onlyCustomTimeouts && !autoQuitManager.hasCustomTimeout(for: bundleID) {
             return .infinity
         }
-        
+
         // Calculate time remaining
         let timeSinceLastFocus = Date().timeIntervalSince(lastFocusTime)
         let timeRemaining = max(0, timeout - timeSinceLastFocus)
-        
+
         return timeRemaining
     }
-    
+
     private func timeUntilQuitString(bundleID: String, lastFocusTime: Date) -> String {
         let timeRemaining = timeUntilQuit(bundleID: bundleID, lastFocusTime: lastFocusTime)
-        
+
         // Check if app will never be quit
         if timeRemaining == .infinity {
             return "Never"
         }
-        
+
         // Format countdown
         if timeRemaining < 60 {
             return "\(Int(timeRemaining))s left"
@@ -380,7 +386,7 @@ struct ContentView: View {
             return "\(days)d left"
         }
     }
-    
+
     private func openSettingsWindow() {
         // If window already exists, just bring it to front
         if let existingWindow = WindowManager.shared.settingsWindow {
@@ -411,6 +417,9 @@ struct ContentView: View {
 
         window.makeKeyAndOrderFront(nil)
 
+        // Activate the app to ensure the window receives focus
+        NSApp.activate(ignoringOtherApps: true)
+
         // Keep a reference
         WindowManager.shared.settingsWindow = window
     }
@@ -424,7 +433,7 @@ class SettingsWindow: NSWindow {
         WindowManager.shared.settingsWindow = nil
         super.close()
     }
-    
+
     deinit {
         print("✅ Settings window deallocated - memory freed")
     }
@@ -437,4 +446,3 @@ class WindowManager {
 
     private init() {}
 }
-

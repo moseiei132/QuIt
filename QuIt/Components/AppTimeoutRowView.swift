@@ -14,7 +14,7 @@ struct AppTimeoutRowView: View {
     let isExcluded: Bool
     let timeout: TimeInterval?
     let onRemove: () -> Void
-    
+
     var body: some View {
         HStack(spacing: 10) {
             if let appInfo = getAppInfo(for: bundleID) {
@@ -24,12 +24,12 @@ struct AppTimeoutRowView: View {
                         .frame(width: 32, height: 32)
                         .opacity(isExcluded ? 0.8 : 1.0)
                 }
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(appInfo.name)
                         .font(.body)
                         .foregroundColor(isExcluded ? .yellow : .primary)
-                    
+
                     Text(bundleID)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -40,16 +40,16 @@ struct AppTimeoutRowView: View {
                     .frame(width: 32, height: 32)
                     .foregroundStyle(.secondary)
                     .opacity(isExcluded ? 0.8 : 1.0)
-                
+
                 Text(bundleID)
                     .font(.body)
                     .foregroundColor(isExcluded ? .yellow : .primary)
             }
-            
+
             Spacer()
-            
+
             timeoutBadge
-            
+
             if !isExcluded && timeout != nil {
                 Button {
                     onRemove()
@@ -67,7 +67,7 @@ struct AppTimeoutRowView: View {
         .background(isExcluded ? Color.yellow.opacity(0.05) : Color.gray.opacity(0.08))
         .cornerRadius(8)
     }
-    
+
     @ViewBuilder
     private var timeoutBadge: some View {
         if isExcluded {
@@ -106,7 +106,7 @@ struct AppTimeoutRowView: View {
                 .cornerRadius(6)
         }
     }
-    
+
     private func getAppInfo(for bundleID: String) -> (name: String, icon: NSImage?)? {
         if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             let name = FileManager.default.displayName(atPath: appURL.path)
@@ -115,11 +115,11 @@ struct AppTimeoutRowView: View {
         }
         return nil
     }
-    
+
     private func formatTimeoutBadge(_ timeout: TimeInterval) -> String {
         let hours = Int(timeout) / 3600
         let minutes = (Int(timeout) % 3600) / 60
-        
+
         if hours > 0 && minutes > 0 {
             return "\(hours)h \(minutes)m"
         } else if hours > 0 {
@@ -129,4 +129,3 @@ struct AppTimeoutRowView: View {
         }
     }
 }
-
