@@ -360,7 +360,8 @@ class AutoQuitManager: ObservableObject {
         
         print("📋 Initializing timers for currently running apps...")
         
-        // First, ensure all running apps have a focus time recorded
+        // First, reset all focus times to current time to avoid using stale cache
+        // This ensures timeout countdown starts fresh from when QuIt launches
         let allApps = NSWorkspace.shared.runningApplications.filter {
             $0.processIdentifier != currentPID && $0.activationPolicy == .regular
         }
@@ -368,13 +369,10 @@ class AutoQuitManager: ObservableObject {
         for app in allApps {
             guard let bundleID = app.bundleIdentifier else { continue }
             
-            // If no focus time exists, record one now (conservative approach)
-            if focusTracker.getLastFocusTime(for: bundleID) == nil {
-                // Record current time as last focus for existing apps
-                // This means they'll start their timeout from now
-                focusTracker.recordInitialFocusTime(for: bundleID)
-                print("   Initialized focus time for: \(app.localizedName ?? bundleID)")
-            }
+            // Always reset focus time to current time on startup
+            // This prevents using cached times from previous sessions
+            focusTracker.resetFocusTime(for: bundleID)
+            print("   Reset focus time for: \(app.localizedName ?? bundleID)")
         }
         
         // Now schedule timers for inactive apps

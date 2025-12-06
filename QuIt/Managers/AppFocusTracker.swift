@@ -85,6 +85,12 @@ class AppFocusTracker: ObservableObject {
         }
     }
     
+    // Force update focus time to current time (used on app startup to reset cache)
+    func resetFocusTime(for bundleID: String) {
+        focusTimes[bundleID] = Date()
+        saveFocusTimes()
+    }
+    
     func getLastFocusTime(for bundleID: String?) -> Date? {
         guard let bundleID = bundleID else { return nil }
         return focusTimes[bundleID]
