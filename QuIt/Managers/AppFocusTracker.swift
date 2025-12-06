@@ -12,70 +12,95 @@ import Foundation
 // Manager to track app focus times for auto-quit feature
 class AppFocusTracker: ObservableObject {
     static let shared = AppFocusTracker()
-    
+
     private let focusTimesKey = "appFocusTimes"
     private var focusTimes: [String: Date] = [:]
-    private var workspaceObserver: NSObjectProtocol?
-    
+    private var workspaceObservers: [NSObjectProtocol] = []
+
     private init() {
         loadFocusTimes()
         startMonitoring()
     }
-    
+
     deinit {
         stopMonitoring()
     }
-    
+
     private func loadFocusTimes() {
         if let data = UserDefaults.standard.data(forKey: focusTimesKey),
-           let decoded = try? JSONDecoder().decode([String: Date].self, from: data) {
+            let decoded = try? JSONDecoder().decode([String: Date].self, from: data)
+        {
             focusTimes = decoded
         }
     }
-    
+
     private func saveFocusTimes() {
         if let encoded = try? JSONEncoder().encode(focusTimes) {
             UserDefaults.standard.set(encoded, forKey: focusTimesKey)
         }
     }
-    
+
     private func startMonitoring() {
         // Monitor app activation events
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+        let activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
             guard let self = self,
-                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let bundleID = app.bundleIdentifier else { return }
-            
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
+                let bundleID = app.bundleIdentifier
+            else { return }
+
             // Record focus time
             self.recordFocusTime(for: bundleID)
         }
-        
+
+        // Monitor app launch events for bulk open support
+        // When apps are bulk opened, they don't trigger activation events
+        // but we still need to record a timestamp so timers can be scheduled
+        let launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
+                let bundleID = app.bundleIdentifier
+            else { return }
+
+            // Record initial focus time when app launches
+            // This ensures bulk-opened apps have a timestamp even if they never become active
+            self.recordInitialLaunchTime(for: bundleID)
+        }
+
+        workspaceObservers = [activationObserver, launchObserver]
+
         // Record current active app on start
         if let activeApp = NSWorkspace.shared.frontmostApplication,
-           let bundleID = activeApp.bundleIdentifier {
+            let bundleID = activeApp.bundleIdentifier
+        {
             recordFocusTime(for: bundleID)
         }
     }
-    
+
     private func stopMonitoring() {
-        if let observer = workspaceObserver {
+        for observer in workspaceObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
-            workspaceObserver = nil
         }
+        workspaceObservers.removeAll()
     }
-    
+
     private func recordFocusTime(for bundleID: String) {
         let now = Date()
         focusTimes[bundleID] = now
         saveFocusTimes()
-        
+
         print("📍 App focus recorded: \(bundleID) at \(now)")
     }
-    
+
     // Public method for AutoQuitManager to initialize focus times
     func recordInitialFocusTime(for bundleID: String) {
         // Only record if not already tracked
@@ -84,35 +109,47 @@ class AppFocusTracker: ObservableObject {
             saveFocusTimes()
         }
     }
-    
+
+    // Record initial launch time for bulk-opened apps
+    // This is called when apps launch (not just when they become active)
+    // Critical for tracking apps that are opened in bulk and never become frontmost
+    private func recordInitialLaunchTime(for bundleID: String) {
+        // Only record if not already tracked - don't overwrite existing focus times
+        if focusTimes[bundleID] == nil {
+            let now = Date()
+            focusTimes[bundleID] = now
+            saveFocusTimes()
+            print("🚀 App launch recorded: \(bundleID) at \(now)")
+        }
+    }
+
     // Force update focus time to current time (used on app startup to reset cache)
     func resetFocusTime(for bundleID: String) {
         focusTimes[bundleID] = Date()
         saveFocusTimes()
     }
-    
+
     func getLastFocusTime(for bundleID: String?) -> Date? {
         guard let bundleID = bundleID else { return nil }
         return focusTimes[bundleID]
     }
-    
+
     func getAllFocusTimes() -> [String: Date] {
         return focusTimes
     }
-    
+
     func clearFocusTime(for bundleID: String) {
         focusTimes.removeValue(forKey: bundleID)
         saveFocusTimes()
     }
-    
+
     func clearAllFocusTimes() {
         focusTimes.removeAll()
         saveFocusTimes()
     }
-    
+
     func getTimeSinceLastFocus(for bundleID: String?) -> TimeInterval? {
         guard let lastFocus = getLastFocusTime(for: bundleID) else { return nil }
         return Date().timeIntervalSince(lastFocus)
     }
 }
-
