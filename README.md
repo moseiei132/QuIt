@@ -11,6 +11,13 @@ A macOS menu bar app for quickly quitting multiple applications with smart auto-
 <img width="792" height="404" alt="CleanShot 2568-12-06 at 16 37 23@2x" src="https://github.com/user-attachments/assets/6e04dc26-8ca7-4dea-aa84-8f8850cef005" />
 
 
+## Updates
+
+QuIt automatically checks for updates via GitHub Releases:
+- **Auto-check**: Optional daily update checking
+- **Manual check**: Settings → About → Check for Updates
+- **GitHub Releases**: Download latest version from [releases page](https://github.com/moseiei132/QuIt/releases)
+
 ## Features
 
 ### Core Features

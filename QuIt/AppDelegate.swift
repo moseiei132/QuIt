@@ -26,6 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.action = #selector(togglePopover(_:))
             button.target = self
         }
+        
+        // Check for updates after launch (with delay to not slow down startup)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            UpdateChecker.shared.performAutoCheckIfNeeded()
+        }
     }
 
     @objc private func togglePopover(_ sender: Any?) {
