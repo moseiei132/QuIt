@@ -9,10 +9,15 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Make String identifiable for sheet(item:)
+extension String: @retroactive Identifiable {
+    public var id: String { self }
+}
+
 struct AutoQuitTabView: View {
     @ObservedObject private var autoQuitManager = AutoQuitManager.shared
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
-    @State private var showingAddAppSheet = false
+    // selectedBundleID is used as the sheet item - when non-nil, sheet shows
     @State private var showingActiveTimersSheet = false
     @State private var selectedBundleID: String?
     @State private var customTimeout: TimeInterval = 300
@@ -52,8 +57,8 @@ struct AutoQuitTabView: View {
             }
             .padding(20)
         }
-        .sheet(isPresented: $showingAddAppSheet) {
-            customTimeoutSheet
+        .sheet(item: $selectedBundleID) { bundleID in
+            customTimeoutSheet(for: bundleID)
         }
         .sheet(isPresented: $showingActiveTimersSheet) {
             activeTimersSheet
@@ -381,39 +386,42 @@ struct AutoQuitTabView: View {
     }
 
     // MARK: - Custom Timeout Sheet
-    private var customTimeoutSheet: some View {
-        VStack(spacing: 20) {
+    private func customTimeoutSheet(for bundleID: String) -> some View {
+        let appInfo = getAppInfo(for: bundleID)
+
+        return VStack(spacing: 20) {
             // Header
             VStack(spacing: 12) {
                 Text("Set Custom Timeout")
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                if let bundleID = selectedBundleID,
-                    let appInfo = getAppInfo(for: bundleID)
-                {
-                    HStack(spacing: 12) {
-                        if let icon = appInfo.icon {
-                            Image(nsImage: icon)
-                                .resizable()
-                                .frame(width: 56, height: 56)
-                                .cornerRadius(8)
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(appInfo.name)
-                                .font(.headline)
-                            Text(bundleID)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
+                HStack(spacing: 12) {
+                    if let icon = appInfo?.icon {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 56, height: 56)
+                            .cornerRadius(8)
+                    } else {
+                        Image(systemName: "app.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 56, height: 56)
                     }
-                    .padding(12)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(8)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(appInfo?.name ?? bundleID)
+                            .font(.headline)
+                        Text(bundleID)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
                 }
+                .padding(12)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(8)
             }
 
             Divider()
@@ -486,7 +494,6 @@ struct AutoQuitTabView: View {
             // Actions
             HStack(spacing: 12) {
                 Button("Cancel") {
-                    showingAddAppSheet = false
                     selectedBundleID = nil
                 }
                 .keyboardShortcut(.cancelAction)
@@ -495,11 +502,8 @@ struct AutoQuitTabView: View {
                 Spacer()
 
                 Button("Set Timeout") {
-                    if let bundleID = selectedBundleID {
-                        autoQuitManager.setTimeout(for: bundleID, timeout: customTimeout)
-                        showingAddAppSheet = false
-                        selectedBundleID = nil
-                    }
+                    autoQuitManager.setTimeout(for: bundleID, timeout: customTimeout)
+                    selectedBundleID = nil
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
@@ -752,9 +756,8 @@ struct AutoQuitTabView: View {
                 let bundle = Bundle(url: url),
                 let bundleID = bundle.bundleIdentifier
             {
-                selectedBundleID = bundleID
                 customTimeout = autoQuitManager.getTimeout(for: bundleID)
-                showingAddAppSheet = true
+                selectedBundleID = bundleID
             }
         }
     }
