@@ -79,6 +79,30 @@ The built app will be in:
 build/Release/QuIt.app
 ```
 
+## Releasing
+
+Releases are automated via GitHub Actions. The workflow builds, signs, and creates distribution files.
+
+### Creating a Release
+
+```bash
+# 1. Update version
+xcrun agvtool new-marketing-version 1.0.6
+
+# 2. Commit and tag
+git add .
+git commit -m "Release v1.0.6"
+git tag v1.0.6
+git push origin main --tags
+```
+
+### Release Artifacts
+
+| File | Purpose |
+|------|---------|
+| `QuIt_X.X.X.dmg` | Installer with Applications shortcut |
+| `QuIt.app.zip` | For in-app OTA updates |
+
 ## Usage
 
 1. **Launch QuIt** - The app appears in your menu bar
