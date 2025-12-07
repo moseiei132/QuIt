@@ -74,6 +74,9 @@ struct ContentView: View {
         Menu {
             ForEach(excludedManager.profiles) { profile in
                 Button {
+                    // Only switch if selecting a different profile
+                    guard excludedManager.selectedProfileID != profile.id else { return }
+                    
                     // Check if all non-excluded apps were selected before switching
                     let wasAllSelected = model.areAllNonExcludedSelected()
                     
