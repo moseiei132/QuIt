@@ -74,8 +74,17 @@ struct ContentView: View {
         Menu {
             ForEach(excludedManager.profiles) { profile in
                 Button {
+                    // Check if all non-excluded apps were selected before switching
+                    let wasAllSelected = model.areAllNonExcludedSelected()
+                    
+                    // Switch profile
                     excludedManager.selectedProfileID = profile.id
                     model.reload()
+                    
+                    // If all were selected, reselect all with new profile's excluded list
+                    if wasAllSelected {
+                        autoSelectAll()
+                    }
                 } label: {
                     HStack {
                         Text(profile.name)
