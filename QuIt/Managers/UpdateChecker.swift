@@ -384,7 +384,12 @@ class UpdateChecker: NSObject, ObservableObject {
 
             // Show confirmation dialog
             DispatchQueue.main.async {
-                self.showInstallConfirmation(newAppURL: newAppURL, currentAppURL: currentAppURL)
+                self.showInstallConfirmation(
+                    newAppURL: newAppURL, 
+                    currentAppURL: currentAppURL,
+                    tempDir: tempDir,
+                    downloadedZipURL: fileURL
+                )
             }
 
         } catch {
@@ -395,7 +400,7 @@ class UpdateChecker: NSObject, ObservableObject {
         }
     }
 
-    private func showInstallConfirmation(newAppURL: URL, currentAppURL: URL) {
+    private func showInstallConfirmation(newAppURL: URL, currentAppURL: URL, tempDir: URL, downloadedZipURL: URL) {
         let alert = NSAlert()
         alert.messageText = "Ready to Install"
         alert.informativeText =
@@ -407,17 +412,31 @@ class UpdateChecker: NSObject, ObservableObject {
         let response = alert.runModal()
 
         if response == .alertFirstButtonReturn {
-            performInstallation(newAppURL: newAppURL, currentAppURL: currentAppURL)
+            performInstallation(
+                newAppURL: newAppURL, 
+                currentAppURL: currentAppURL,
+                tempDir: tempDir,
+                downloadedZipURL: downloadedZipURL
+            )
+        } else {
+            // Clean up if user cancels
+            cleanupUpdateFiles(tempDir: tempDir, downloadedZipURL: downloadedZipURL)
         }
     }
 
-    private func performInstallation(newAppURL: URL, currentAppURL: URL) {
-        // Create a script to replace the app and relaunch
+    private func performInstallation(newAppURL: URL, currentAppURL: URL, tempDir: URL, downloadedZipURL: URL) {
+        // Create a script to replace the app, clean up temporary files, and relaunch
         let script = """
             #!/bin/bash
             sleep 1
+            # Replace the old app with the new one
             rm -rf "\(currentAppURL.path)"
             cp -R "\(newAppURL.path)" "\(currentAppURL.path)"
+            # Clean up temporary files
+            rm -rf "\(tempDir.path)"
+            rm -f "\(downloadedZipURL.path)"
+            rm -f "$0"
+            # Relaunch the app
             open "\(currentAppURL.path)"
             """
 
@@ -434,6 +453,11 @@ class UpdateChecker: NSObject, ObservableObject {
             try chmodProcess.run()
             chmodProcess.waitUntilExit()
 
+            print("🧹 Cleanup script will remove:")
+            print("   - Temp directory: \(tempDir.path)")
+            print("   - Downloaded ZIP: \(downloadedZipURL.path)")
+            print("   - Update script: \(scriptURL.path)")
+
             // Execute script in background
             let process = Process()
             process.executableURL = URL(filePath: "/bin/bash")
@@ -445,6 +469,26 @@ class UpdateChecker: NSObject, ObservableObject {
 
         } catch {
             showErrorAlert(message: "Failed to perform installation: \(error.localizedDescription)")
+            // Clean up on error
+            cleanupUpdateFiles(tempDir: tempDir, downloadedZipURL: downloadedZipURL)
+        }
+    }
+    
+    private func cleanupUpdateFiles(tempDir: URL, downloadedZipURL: URL) {
+        do {
+            // Remove temporary extraction directory
+            if FileManager.default.fileExists(atPath: tempDir.path) {
+                try FileManager.default.removeItem(at: tempDir)
+                print("🧹 Cleaned up temp directory: \(tempDir.path)")
+            }
+            
+            // Remove downloaded ZIP file
+            if FileManager.default.fileExists(atPath: downloadedZipURL.path) {
+                try FileManager.default.removeItem(at: downloadedZipURL)
+                print("🧹 Cleaned up downloaded ZIP: \(downloadedZipURL.path)")
+            }
+        } catch {
+            print("⚠️ Failed to clean up update files: \(error.localizedDescription)")
         }
     }
 
