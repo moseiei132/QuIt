@@ -469,12 +469,12 @@ class UpdateChecker: NSObject, ObservableObject {
 
         } catch {
             showErrorAlert(message: "Failed to perform installation: \(error.localizedDescription)")
-            // Clean up on error
-            cleanupUpdateFiles(tempDir: tempDir, downloadedZipURL: downloadedZipURL)
+            // Clean up on error, including the script file
+            cleanupUpdateFiles(tempDir: tempDir, downloadedZipURL: downloadedZipURL, scriptURL: scriptURL)
         }
     }
     
-    private func cleanupUpdateFiles(tempDir: URL, downloadedZipURL: URL) {
+    private func cleanupUpdateFiles(tempDir: URL, downloadedZipURL: URL, scriptURL: URL? = nil) {
         do {
             // Remove temporary extraction directory
             if FileManager.default.fileExists(atPath: tempDir.path) {
@@ -486,6 +486,12 @@ class UpdateChecker: NSObject, ObservableObject {
             if FileManager.default.fileExists(atPath: downloadedZipURL.path) {
                 try FileManager.default.removeItem(at: downloadedZipURL)
                 print("🧹 Cleaned up downloaded ZIP: \(downloadedZipURL.path)")
+            }
+            
+            // Remove update script file if it exists
+            if let scriptURL = scriptURL, FileManager.default.fileExists(atPath: scriptURL.path) {
+                try FileManager.default.removeItem(at: scriptURL)
+                print("🧹 Cleaned up update script: \(scriptURL.path)")
             }
         } catch {
             print("⚠️ Failed to clean up update files: \(error.localizedDescription)")
