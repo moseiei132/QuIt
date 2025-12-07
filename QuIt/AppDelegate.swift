@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             // Ensure the app becomes active so keyboard focus works
             NSApp.activate(ignoringOtherApps: true)
+            // Make the popover window the key window to receive focus
+            // Use a small delay to ensure the window is fully initialized
+            DispatchQueue.main.async {
+                self.popover.contentViewController?.view.window?.makeKey()
+            }
         }
     }
     
