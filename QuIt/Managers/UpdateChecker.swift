@@ -283,7 +283,7 @@ class UpdateChecker: NSObject, ObservableObject {
         guard progressWindow == nil else { return }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 150),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 170),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -295,21 +295,21 @@ class UpdateChecker: NSObject, ObservableObject {
         let contentView = NSView(frame: window.contentView!.bounds)
 
         let label = NSTextField(labelWithString: "Downloading QuIt update...")
-        label.frame = NSRect(x: 20, y: 90, width: 360, height: 20)
+        label.frame = NSRect(x: 20, y: 130, width: 360, height: 20)
         label.alignment = .center
 
         let progressIndicator = NSProgressIndicator(
-            frame: NSRect(x: 20, y: 50, width: 360, height: 20))
+            frame: NSRect(x: 20, y: 100, width: 360, height: 20))
         progressIndicator.isIndeterminate = false
         progressIndicator.minValue = 0
         progressIndicator.maxValue = 1
         progressIndicator.doubleValue = 0
 
         let statusLabel = NSTextField(labelWithString: "0 MB / 0 MB")
-        statusLabel.frame = NSRect(x: 20, y: 25, width: 360, height: 20)
+        statusLabel.frame = NSRect(x: 20, y: 70, width: 360, height: 20)
         statusLabel.alignment = .center
 
-        let cancelButton = NSButton(frame: NSRect(x: 150, y: 10, width: 100, height: 30))
+        let cancelButton = NSButton(frame: NSRect(x: 150, y: 20, width: 100, height: 30))
         cancelButton.title = "Cancel"
         cancelButton.bezelStyle = .rounded
         cancelButton.target = self
