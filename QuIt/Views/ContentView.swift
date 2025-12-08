@@ -36,7 +36,7 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.white.opacity(0.15), lineWidth: 1)
         )
-        .frame(width: 320)
+        .frame(width: 330)
         .onAppear {
             // Load apps only when popover opens
             model.reload()
@@ -311,19 +311,19 @@ struct ContentView: View {
                             Button {
                                 templateManager.launch(template: template)
                             } label: {
-                                Label(template.name, systemImage: "list.bullet.rectangle")
+                                Text(template.name)
                             }
                         }
                     } label: {
-                        Image(systemName: "rocket")
+                        Label("Open", systemImage: "globe")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .help("Quick Open Template")
                     .menuIndicator(.hidden)
                 }
 
-                Spacer(minLength: 8)
+                // Spacer(minLength: 8)
 
                 Button {
                     keepAwakeManager.isEnabled.toggle()
