@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AboutTabView: View {
     @ObservedObject private var updateChecker = UpdateChecker.shared
+    @State private var showBuildInfoPopover = false
 
     var body: some View {
         ScrollView {
@@ -53,6 +54,39 @@ struct AboutTabView: View {
                     Text("(\(updateChecker.getCurrentBuildNumber()))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                }
+
+                HStack(spacing: 8) {
+                    Text("Build:")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 4) {
+                        Text(UpdateChecker.BuildInfo.isOfficialBuild ? "Official" : "Unofficial")
+                            .font(.callout)
+                            .fontWeight(.medium)
+                            .foregroundStyle(
+                                UpdateChecker.BuildInfo.isOfficialBuild ? .green : .orange)
+
+                        if !UpdateChecker.BuildInfo.isOfficialBuild {
+                            Button {
+                                showBuildInfoPopover.toggle()
+                            } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .popover(isPresented: $showBuildInfoPopover) {
+                                Text(
+                                    "Unofficial builds (self-compiled) cannot use OTA updates due to certificate matching requirements. You must download updates manually from GitHub."
+                                )
+                                .font(.callout)
+                                .padding()
+                                .frame(width: 300)
+                            }
+                        }
+                    }
                 }
 
                 Text(

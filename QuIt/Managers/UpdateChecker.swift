@@ -63,6 +63,19 @@ struct ReleaseAsset: Codable {
 class UpdateChecker: NSObject, ObservableObject {
     static let shared = UpdateChecker()
 
+    // MARK: - Build Info
+
+    enum BuildInfo {
+        /// Returns true if the app was built with the OFFICIAL_BUILD flag (e.g. in CI/CD)
+        static var isOfficialBuild: Bool {
+            #if OFFICIAL_BUILD
+                return true
+            #else
+                return false
+            #endif
+        }
+    }
+
     // MARK: - Configuration
     private let updateURL = "https://api.github.com/repos/moseiei132/QuIt/releases/latest"
     private let releasesPageURL = "https://github.com/moseiei132/QuIt/releases"
@@ -217,7 +230,7 @@ class UpdateChecker: NSObject, ObservableObject {
         if isNewer {
             if showAlert {
                 showUpdateAlert(updateInfo: updateInfo)
-            } else if autoDownloadEnabled {
+            } else if autoDownloadEnabled && BuildInfo.isOfficialBuild {
                 // Auto-download in background if enabled
                 downloadLatestVersion()
             }
@@ -385,7 +398,7 @@ class UpdateChecker: NSObject, ObservableObject {
             // Show confirmation dialog
             DispatchQueue.main.async {
                 self.showInstallConfirmation(
-                    newAppURL: newAppURL, 
+                    newAppURL: newAppURL,
                     currentAppURL: currentAppURL,
                     tempDir: tempDir,
                     downloadedZipURL: fileURL
@@ -400,7 +413,9 @@ class UpdateChecker: NSObject, ObservableObject {
         }
     }
 
-    private func showInstallConfirmation(newAppURL: URL, currentAppURL: URL, tempDir: URL, downloadedZipURL: URL) {
+    private func showInstallConfirmation(
+        newAppURL: URL, currentAppURL: URL, tempDir: URL, downloadedZipURL: URL
+    ) {
         let alert = NSAlert()
         alert.messageText = "Ready to Install"
         alert.informativeText =
@@ -413,7 +428,7 @@ class UpdateChecker: NSObject, ObservableObject {
 
         if response == .alertFirstButtonReturn {
             performInstallation(
-                newAppURL: newAppURL, 
+                newAppURL: newAppURL,
                 currentAppURL: currentAppURL,
                 tempDir: tempDir,
                 downloadedZipURL: downloadedZipURL
@@ -424,7 +439,9 @@ class UpdateChecker: NSObject, ObservableObject {
         }
     }
 
-    private func performInstallation(newAppURL: URL, currentAppURL: URL, tempDir: URL, downloadedZipURL: URL) {
+    private func performInstallation(
+        newAppURL: URL, currentAppURL: URL, tempDir: URL, downloadedZipURL: URL
+    ) {
         // Create a script to replace the app, clean up temporary files, and relaunch
         let script = """
             #!/bin/bash
@@ -470,10 +487,11 @@ class UpdateChecker: NSObject, ObservableObject {
         } catch {
             showErrorAlert(message: "Failed to perform installation: \(error.localizedDescription)")
             // Clean up on error, including the script file
-            cleanupUpdateFiles(tempDir: tempDir, downloadedZipURL: downloadedZipURL, scriptURL: scriptURL)
+            cleanupUpdateFiles(
+                tempDir: tempDir, downloadedZipURL: downloadedZipURL, scriptURL: scriptURL)
         }
     }
-    
+
     private func cleanupUpdateFiles(tempDir: URL, downloadedZipURL: URL, scriptURL: URL? = nil) {
         do {
             // Remove temporary extraction directory
@@ -481,13 +499,13 @@ class UpdateChecker: NSObject, ObservableObject {
                 try FileManager.default.removeItem(at: tempDir)
                 print("🧹 Cleaned up temp directory: \(tempDir.path)")
             }
-            
+
             // Remove downloaded ZIP file
             if FileManager.default.fileExists(atPath: downloadedZipURL.path) {
                 try FileManager.default.removeItem(at: downloadedZipURL)
                 print("🧹 Cleaned up downloaded ZIP: \(downloadedZipURL.path)")
             }
-            
+
             // Remove update script file if it exists
             if let scriptURL = scriptURL, FileManager.default.fileExists(atPath: scriptURL.path) {
                 try FileManager.default.removeItem(at: scriptURL)
@@ -513,19 +531,33 @@ class UpdateChecker: NSObject, ObservableObject {
             \(updateInfo.body.isEmpty ? "See GitHub releases page for details" : updateInfo.body)
             """
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Download & Install")
-        alert.addButton(withTitle: "View on GitHub")
-        alert.addButton(withTitle: "Later")
+        if BuildInfo.isOfficialBuild {
+            alert.addButton(withTitle: "Download & Install")
+            alert.addButton(withTitle: "View on GitHub")
+            alert.addButton(withTitle: "Later")
+        } else {
+            alert.addButton(withTitle: "View on GitHub")
+            alert.addButton(withTitle: "Later")
+        }
 
         let response = alert.runModal()
 
-        if response == .alertFirstButtonReturn {
-            // Download & Install
-            downloadLatestVersion()
-        } else if response == .alertSecondButtonReturn {
-            // View on GitHub
-            if let url = URL(string: releasesPageURL) {
-                NSWorkspace.shared.open(url)
+        if BuildInfo.isOfficialBuild {
+            if response == .alertFirstButtonReturn {
+                // Download & Install
+                downloadLatestVersion()
+            } else if response == .alertSecondButtonReturn {
+                // View on GitHub
+                if let url = URL(string: releasesPageURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        } else {
+            if response == .alertFirstButtonReturn {
+                // View on GitHub
+                if let url = URL(string: releasesPageURL) {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
     }
