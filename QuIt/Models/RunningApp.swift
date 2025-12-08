@@ -19,4 +19,3 @@ struct RunningApp: Identifiable, Hashable {
     let pid: pid_t
     let lastFocusTime: Date?
 }
-
