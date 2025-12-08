@@ -13,6 +13,7 @@ struct ContentView: View {
     @StateObject private var model = RunningAppsModel()
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
     @ObservedObject private var autoQuitManager = AutoQuitManager.shared
+    @ObservedObject private var keepAwakeManager = KeepAwakeManager.shared
 
     var body: some View {
         VStack(spacing: 12) {
@@ -76,14 +77,14 @@ struct ContentView: View {
                 Button {
                     // Only switch if selecting a different profile
                     guard excludedManager.selectedProfileID != profile.id else { return }
-                    
+
                     // Check if all non-excluded apps were selected before switching
                     let wasAllSelected = model.areAllNonExcludedSelected()
-                    
+
                     // Switch profile
                     excludedManager.selectedProfileID = profile.id
                     model.reload()
-                    
+
                     // If all were selected, reselect all with new profile's excluded list
                     if wasAllSelected {
                         autoSelectAll()
@@ -299,6 +300,19 @@ struct ContentView: View {
                 .disabled(model.selectedIDs.isEmpty)
 
                 Spacer(minLength: 8)
+
+                Button {
+                    keepAwakeManager.isEnabled.toggle()
+                } label: {
+                    Image(
+                        systemName: keepAwakeManager.isEnabled
+                            ? "cup.and.saucer.fill" : "moon.zzz.fill"
+                    )
+                    .foregroundColor(keepAwakeManager.isEnabled ? .green : .secondary)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(keepAwakeManager.isEnabled ? "Keep Awake: On" : "Keep Awake: Off")
 
                 Button {
                     openSettingsWindow()

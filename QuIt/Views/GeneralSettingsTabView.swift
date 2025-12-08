@@ -11,6 +11,7 @@ import SwiftUI
 struct GeneralSettingsTabView: View {
     @State private var launchAtLogin: Bool = false
     @ObservedObject private var autoQuitManager = AutoQuitManager.shared
+    @ObservedObject private var keepAwakeManager = KeepAwakeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -41,6 +42,21 @@ struct GeneralSettingsTabView: View {
                     .toggleStyle(.switch)
 
                 Text("Show a notification when an app is automatically quit.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("System")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Toggle("Keep Mac Awake", isOn: $keepAwakeManager.isEnabled)
+                    .toggleStyle(.switch)
+
+                Text("Prevent your Mac from going to sleep while QuIt is running.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
