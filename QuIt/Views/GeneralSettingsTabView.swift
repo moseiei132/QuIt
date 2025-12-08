@@ -10,8 +10,10 @@ import SwiftUI
 
 struct GeneralSettingsTabView: View {
     @State private var launchAtLogin: Bool = false
+    @State private var showClearLogsAlert: Bool = false
     @ObservedObject private var autoQuitManager = AutoQuitManager.shared
     @ObservedObject private var keepAwakeManager = KeepAwakeManager.shared
+    @ObservedObject private var debugLogger = DebugLogger.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -61,11 +63,52 @@ struct GeneralSettingsTabView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Debug")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Toggle("Debug Mode", isOn: $debugLogger.isDebugEnabled)
+                    .toggleStyle(.switch)
+
+                Text("Enable detailed logging of app activation and auto-quit events.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    Button("Open Log File") {
+                        if let logURL = debugLogger.getLogFileURL() {
+                            NSWorkspace.shared.open(logURL)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Clear Logs") {
+                        showClearLogsAlert = true
+                    }
+                    .buttonStyle(.bordered)
+
+                    Text("Log size: \(debugLogger.getLogFileSize())")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Spacer()
         }
         .padding(20)
         .onAppear {
             launchAtLogin = isLaunchAtLoginEnabled()
+        }
+        .alert("Clear Logs", isPresented: $showClearLogsAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) {
+                debugLogger.clearLogs()
+            }
+        } message: {
+            Text("Are you sure you want to delete all debug logs?")
         }
     }
 
