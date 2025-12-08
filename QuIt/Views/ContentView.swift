@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var model = RunningAppsModel()
+    @ObservedObject private var templateManager = AppTemplateManager.shared
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
     @ObservedObject private var autoQuitManager = AutoQuitManager.shared
     @ObservedObject private var keepAwakeManager = KeepAwakeManager.shared
@@ -302,6 +303,25 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(model.selectedIDs.isEmpty)
+
+                // Quick Open Menu
+                if !templateManager.templates.isEmpty {
+                    Menu {
+                        ForEach(templateManager.templates) { template in
+                            Button {
+                                templateManager.launch(template: template)
+                            } label: {
+                                Label(template.name, systemImage: "list.bullet.rectangle")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "rocket")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Quick Open Template")
+                    .menuIndicator(.hidden)
+                }
 
                 Spacer(minLength: 8)
 
