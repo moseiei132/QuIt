@@ -11,7 +11,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case general = "General"
     case excludeApps = "Exclude Apps"
     case autoQuit = "Auto-Quit"
-    case focusTracking = "Focus Tracking"
+    //    case focusTracking = "Focus Tracking"
     case templates = "Templates"
     case about = "About"
 
@@ -25,12 +25,12 @@ enum SettingsSection: String, CaseIterable, Identifiable {
             return "eye.slash"
         case .autoQuit:
             return "timer"
-        case .focusTracking:
-            return "clock"
-        case .about:
-            return "info.circle"
+        //        case .focusTracking:
+        //            return "clock"
         case .templates:
             return "list.bullet.rectangle"
+        case .about:
+            return "info.circle"
         }
     }
 }
@@ -57,10 +57,10 @@ struct SettingsView: View {
                         NavigationStack {
                             GeneralSettingsTabView()
                         }
-                    case .focusTracking:
-                        NavigationStack {
-                            FocusTrackingTabView()
-                        }
+                    //                    case .focusTracking:
+                    //                        NavigationStack {
+                    //                            FocusTrackingTabView()
+                    //                        }
                     case .autoQuit:
                         NavigationStack {
                             AutoQuitTabView()
