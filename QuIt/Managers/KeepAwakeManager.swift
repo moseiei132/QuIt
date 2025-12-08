@@ -68,8 +68,8 @@ class KeepAwakeManager: ObservableObject {
         // Create a new power assertion to prevent system sleep
         let reason = "QuIt - Keep Awake" as CFString
 
-        // Use NoIdleSleep to prevent both display and system sleep
-        let assertionType = kIOPMAssertionTypeNoIdleSleep as CFString
+        // Use PreventUserIdleDisplaySleep to prevent display sleep (and system sleep)
+        let assertionType = kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString
 
         let result = IOPMAssertionCreateWithName(
             assertionType,
