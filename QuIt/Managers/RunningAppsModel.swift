@@ -50,7 +50,7 @@ final class RunningAppsModel: ObservableObject {
                 let id = Int(pid)  // unique per process
                 let name = app.localizedName ?? app.bundleIdentifier ?? "PID \(pid)"
                 let lastFocusTime = focusTracker.getLastFocusTime(for: app.bundleIdentifier)
-                
+
                 return RunningApp(
                     id: id,
                     bundleIdentifier: app.bundleIdentifier,
@@ -62,10 +62,21 @@ final class RunningAppsModel: ObservableObject {
                 )
             }
             .sorted { lhs, rhs in
-                // Active app first, then alphabetical
+                let excludedManager = ExcludedAppsManager.shared
+                let lhsExcluded = excludedManager.isExcluded(lhs.bundleIdentifier)
+                let rhsExcluded = excludedManager.isExcluded(rhs.bundleIdentifier)
+
+                // Excluded apps first
+                if lhsExcluded != rhsExcluded {
+                    return lhsExcluded && !rhsExcluded
+                }
+
+                // Then active apps
                 if lhs.isActive != rhs.isActive {
                     return lhs.isActive && !rhs.isActive
                 }
+
+                // Then alphabetical
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
         self.apps = running
@@ -179,6 +190,18 @@ final class RunningAppsModel: ObservableObject {
         }
     }
 
+    // Focus/activate an app by bringing it to the front
+    func focusApp(_ app: RunningApp) {
+        // Find the NSRunningApplication instance for this app
+        if let runningApp = NSWorkspace.shared.runningApplications.first(where: {
+            $0.processIdentifier == app.pid
+        }) {
+            // Activate the app, bringing it to the front
+            runningApp.activate(options: [.activateAllWindows])
+            print("🎯 Focused app: \(app.name)")
+        }
+    }
+
     // Send a Quit Apple Event (kAEQuitApplication) to the target app using low-level Apple Events.
     // Returns true if the event was sent (not necessarily that the app quit).
     private func sendQuitAppleEventDirect(to app: NSRunningApplication) -> Bool {
@@ -201,4 +224,3 @@ final class RunningAppsModel: ObservableObject {
         return result != nil
     }
 }
-

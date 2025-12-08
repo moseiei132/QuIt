@@ -234,39 +234,43 @@ struct ContentView: View {
             .toggleStyle(.checkbox)
             .labelsHidden()
 
-            // App icon
-            Image(nsImage: app.icon ?? NSImage())
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 20, height: 20)
-                .cornerRadius(4)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                )
-                .opacity(isExcluded ? 0.6 : 1.0)
+            // Clickable area to focus app
+            Button {
+                model.focusApp(app)
+            } label: {
+                HStack(spacing: 8) {
+                    // App icon
+                    Image(nsImage: app.icon ?? NSImage())
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                        .cornerRadius(4)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                        )
+                        .opacity(isExcluded ? 0.6 : 1.0)
 
-            // App name with time info
-            HStack(spacing: 4) {
-                Text(app.name)
-                    .font(.body)
-                    .lineLimit(1)
-                    .foregroundColor(isExcluded ? .yellow : .primary)
+                    // App name with time info
+                    HStack(spacing: 4) {
+                        Text(app.name)
+                            .font(.body)
+                            .lineLimit(1)
+                            .foregroundColor(isExcluded ? .yellow : .primary)
 
-                if let lastFocusTime = app.lastFocusTime {
-                    appTimeInfo(app: app, lastFocusTime: lastFocusTime)
+                        // Only show time info for non-excluded apps
+                        if !isExcluded, let lastFocusTime = app.lastFocusTime {
+                            appTimeInfo(app: app, lastFocusTime: lastFocusTime)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
                 }
             }
-
-            Spacer(minLength: 8)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .background(
-            app.isActive
-                ? Color.white.opacity(0.08)
-                : Color.clear
-        )
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
