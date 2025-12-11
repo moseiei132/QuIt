@@ -81,15 +81,48 @@ class AppTemplateManager: ObservableObject {
         }
     }
 
+    // MARK: - QuIt Tabs Integration
+
+    // Valid Chrome tab group colors (from QuIt-Tabs extension)
+    private let validQuitColors = [
+        "grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange",
+    ]
+
+    private func getQuitColor(from template: AppTemplate) -> String {
+        if template.quitTabsColor == "random" {
+            return validQuitColors.randomElement() ?? "grey"
+        }
+        return template.quitTabsColor
+    }
+
+    private func appendQuitParams(to url: URL, template: AppTemplate) -> URL {
+        guard template.quitTabsEnabled else { return url }
+
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var queryItems = components?.queryItems ?? []
+
+        let groupName =
+            (template.quitTabsGroup?.isEmpty == false)
+            ? template.quitTabsGroup!
+            : template.name
+
+        queryItems.append(URLQueryItem(name: "quit_pause", value: "true"))
+        queryItems.append(URLQueryItem(name: "quit_color", value: getQuitColor(from: template)))
+        queryItems.append(URLQueryItem(name: "quit_group", value: groupName))
+
+        components?.queryItems = queryItems
+        return components?.url ?? url
+    }
+
     // MARK: - Launching Logic
 
     func launch(template: AppTemplate) {
         for item in template.items {
-            launchItem(item)
+            launchItem(item, template: template)
         }
     }
 
-    private func launchItem(_ item: TemplateItem) {
+    private func launchItem(_ item: TemplateItem, template: AppTemplate) {
         // Check if there are any parameters
         guard let params = item.parameters, !params.isEmpty else {
             // No parameters - just launch the app normally
@@ -100,9 +133,12 @@ class AppTemplateManager: ObservableObject {
         // Handle URL parameters (for browsers) - support multiple URLs
         let urlParams = params.filter { $0.key.starts(with: "url") }
         if !urlParams.isEmpty {
-            let urls = urlParams.sorted(by: { $0.key < $1.key })
+            var urls = urlParams.sorted(by: { $0.key < $1.key })
                 .compactMap { URL(string: $0.value) }
                 .filter { !$0.absoluteString.isEmpty }
+
+            // Append QuIt Tabs parameters if enabled
+            urls = urls.map { appendQuitParams(to: $0, template: template) }
 
             if !urls.isEmpty {
                 if let appURL = NSWorkspace.shared.urlForApplication(
