@@ -100,6 +100,107 @@ struct TemplatesTabView: View {
                 }
             }
 
+            // QuIt Tabs Integration Section
+            if currentTemplate != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Toggle(
+                            "QuIt Tabs Integration",
+                            isOn: Binding(
+                                get: { currentTemplate?.quitTabsEnabled ?? false },
+                                set: { newValue in
+                                    if let index = manager.templates.firstIndex(where: {
+                                        $0.id == currentTemplate?.id
+                                    }) {
+                                        manager.templates[index].quitTabsEnabled = newValue
+                                        manager.saveTemplates()
+                                    }
+                                }
+                            )
+                        )
+                        .help(
+                            "Append QuIt Tabs parameters to browser URLs for automatic tab grouping"
+                        )
+
+                        Button {
+                            if let url = URL(string: "https://github.com/moseiei132/QuIt-Tabs") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Learn more about QuIt Tabs extension")
+                    }
+
+                    if currentTemplate?.quitTabsEnabled == true {
+                        HStack(spacing: 12) {
+                            HStack {
+                                Text("Group:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField(
+                                    currentTemplate?.name ?? "Template Name",
+                                    text: Binding(
+                                        get: { currentTemplate?.quitTabsGroup ?? "" },
+                                        set: { newValue in
+                                            if let index = manager.templates.firstIndex(where: {
+                                                $0.id == currentTemplate?.id
+                                            }) {
+                                                manager.templates[index].quitTabsGroup =
+                                                    newValue.isEmpty ? nil : newValue
+                                                manager.saveTemplates()
+                                            }
+                                        }
+                                    )
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 150)
+                            }
+
+                            HStack {
+                                Text("Color:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Picker(
+                                    "",
+                                    selection: Binding(
+                                        get: { currentTemplate?.quitTabsColor ?? "random" },
+                                        set: { newValue in
+                                            if let index = manager.templates.firstIndex(where: {
+                                                $0.id == currentTemplate?.id
+                                            }) {
+                                                manager.templates[index].quitTabsColor = newValue
+                                                manager.saveTemplates()
+                                            }
+                                        }
+                                    )
+                                ) {
+                                    Text("Random").tag("random")
+                                    Divider()
+                                    Text("Grey").tag("grey")
+                                    Text("Blue").tag("blue")
+                                    Text("Red").tag("red")
+                                    Text("Yellow").tag("yellow")
+                                    Text("Green").tag("green")
+                                    Text("Pink").tag("pink")
+                                    Text("Purple").tag("purple")
+                                    Text("Cyan").tag("cyan")
+                                    Text("Orange").tag("orange")
+                                }
+                                .frame(width: 100)
+                            }
+
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(10)
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(8)
+            }
+
             Divider()
 
             // List of apps in template

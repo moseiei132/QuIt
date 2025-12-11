@@ -11,6 +11,11 @@ struct AppTemplate: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var name: String
     var items: [TemplateItem]
+    
+    // QuIt Tabs Integration
+    var quitTabsEnabled: Bool = false
+    var quitTabsColor: String = "random"  // "random" or specific color from VALID_COLORS
+    var quitTabsGroup: String?  // nil defaults to template name
 }
 
 struct TemplateItem: Identifiable, Codable, Hashable {
