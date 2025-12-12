@@ -31,24 +31,22 @@ struct ProfileAlarmsTabView: View {
             if alarmManager.alarms.isEmpty {
                 emptyStateView
             } else {
-                ScrollView {
-                    VStack(spacing: 12) {
-                        ForEach(alarmManager.alarms) { alarm in
-                            AlarmRowView(
-                                alarm: alarm,
-                                onEdit: {
-                                    editingAlarm = alarm
-                                },
-                                onDelete: {
-                                    alarmManager.deleteAlarm(alarm)
-                                },
-                                onToggle: {
-                                    alarmManager.toggleAlarm(alarm)
-                                })
-                        }
+                List {
+                    ForEach(alarmManager.alarms) { alarm in
+                        AlarmRowView(
+                            alarm: alarm,
+                            onEdit: {
+                                editingAlarm = alarm
+                            },
+                            onDelete: {
+                                alarmManager.deleteAlarm(alarm)
+                            },
+                            onToggle: {
+                                alarmManager.toggleAlarm(alarm)
+                            })
                     }
-                    .padding(.bottom, 8)
                 }
+                .listStyle(.inset)
             }
 
             Spacer()
@@ -111,7 +109,7 @@ struct ProfileAlarmsTabView: View {
             systemImage: "alarm",
             description: Text("Create an alarm to automatically switch profiles at specific times")
         )
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 }
 
@@ -125,77 +123,73 @@ struct AlarmRowView: View {
 
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
 
-    private var profileName: String {
-        excludedManager.profiles.first(where: { $0.id == alarm.targetProfileID })?.name ?? "Unknown"
-    }
-
     var body: some View {
         HStack(spacing: 12) {
-            // Time and Days
-            VStack(alignment: .leading, spacing: 4) {
-                Text(alarm.formattedTime)
-                    .font(.title3)
-                    .fontWeight(.semibold)
+            // Toggle
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { alarm.isEnabled },
+                    set: { _ in onToggle() }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
 
-                Text(alarm.daysOfWeekString)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .frame(width: 120, alignment: .leading)
+            // Time
+            Text(alarm.formattedTime)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(alarm.isEnabled ? .primary : .secondary)
+                .frame(width: 80, alignment: .leading)
 
-            Divider()
-
-            // Profile
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(profileName)
-                        .font(.body)
-                        .fontWeight(.medium)
+            // Profile, days, and mode
+            VStack(alignment: .leading, spacing: 3) {
+                if let profileName = excludedManager.profiles.first(where: {
+                    $0.id == alarm.targetProfileID
+                })?.name {
+                    HStack(spacing: 4) {
+                        Image(systemName: alarm.autoSwitch ? "arrow.triangle.2.circlepath" : "bell")
+                            .font(.caption2)
+                            .foregroundColor(alarm.autoSwitch ? .blue : .orange)
+                        Text(profileName)
+                            .font(.body)
+                    }
                 }
 
-                // Mode badge
-                Text(alarm.autoSwitch ? "Auto-switch" : "Alert only")
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        alarm.autoSwitch ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2)
-                    )
-                    .foregroundColor(alarm.autoSwitch ? .blue : .secondary)
-                    .cornerRadius(4)
+                if !alarm.daysOfWeek.isEmpty {
+                    Text(alarm.daysOfWeekString)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Every day")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Spacer()
 
-            // Toggle
-            Toggle("", isOn: .constant(alarm.isEnabled))
-                .labelsHidden()
-                .onChange(of: alarm.isEnabled) {
-                    onToggle()
+            // Actions with colors and spacing
+            HStack(spacing: 12) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.blue)
                 }
+                .buttonStyle(.plain)
+                .help("Edit alarm")
 
-            // Actions
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
-                    .foregroundColor(.blue)
+                Button(action: onDelete) {
+                    Image(systemName: "trash.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Delete alarm")
             }
-            .buttonStyle(.plain)
-            .help("Edit alarm")
-
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundColor(.red)
-            }
-            .buttonStyle(.plain)
-            .help("Delete alarm")
         }
-        .padding(12)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(8)
-        .opacity(alarm.isEnabled ? 1.0 : 0.5)
+        .opacity(alarm.isEnabled ? 1.0 : 0.6)
     }
 }
 
