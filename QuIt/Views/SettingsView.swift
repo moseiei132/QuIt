@@ -13,6 +13,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case autoQuit = "Auto-Quit"
     //    case focusTracking = "Focus Tracking"
     case templates = "Templates"
+    case alarms = "Alarms"
     case about = "About"
 
     var id: String { self.rawValue }
@@ -29,6 +30,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         //            return "clock"
         case .templates:
             return "list.bullet.rectangle"
+        case .alarms:
+            return "alarm"
         case .about:
             return "info.circle"
         }
@@ -76,6 +79,10 @@ struct SettingsView: View {
                     case .templates:
                         NavigationStack {
                             TemplatesTabView()
+                        }
+                    case .alarms:
+                        NavigationStack {
+                            ProfileAlarmsTabView()
                         }
                     }
                 } else {
