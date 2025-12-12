@@ -118,6 +118,8 @@ struct TemplatesTabView: View {
                                 }
                             )
                         )
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                         .help(
                             "Append QuIt Tabs parameters to browser URLs for automatic tab grouping"
                         )

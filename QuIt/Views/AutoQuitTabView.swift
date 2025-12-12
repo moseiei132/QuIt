@@ -38,6 +38,7 @@ struct AutoQuitTabView: View {
                 // Enable/Disable toggle
                 Toggle("Enable Auto-Quit", isOn: $autoQuitManager.isEnabled)
                     .toggleStyle(.switch)
+                    .controlSize(.small)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
@@ -91,6 +92,7 @@ struct AutoQuitTabView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Respect Exclude Apps", isOn: $autoQuitManager.respectExcludeApps)
                             .toggleStyle(.switch)
+                            .controlSize(.small)
                             .font(.subheadline)
 
                         Text("Skip apps in the exclude list")
@@ -104,6 +106,7 @@ struct AutoQuitTabView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Only Custom Timeouts", isOn: $autoQuitManager.onlyCustomTimeouts)
                             .toggleStyle(.switch)
+                            .controlSize(.small)
                             .font(.subheadline)
 
                         Text("Auto-quit only apps with custom timeout settings")
@@ -117,6 +120,7 @@ struct AutoQuitTabView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Show Notifications", isOn: $autoQuitManager.notifyOnAutoQuit)
                             .toggleStyle(.switch)
+                            .controlSize(.small)
                             .font(.subheadline)
 
                         Text("Notify when an app is automatically quit")
@@ -473,6 +477,7 @@ struct AutoQuitTabView: View {
                         }
                     }
                     .toggleStyle(.switch)
+                    .controlSize(.small)
                 }
 
                 // Timeout duration

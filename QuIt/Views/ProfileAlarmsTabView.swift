@@ -135,6 +135,7 @@ struct AlarmRowView: View {
             )
             .labelsHidden()
             .toggleStyle(.switch)
+            .controlSize(.small)
 
             // Time
             Text(alarm.formattedTime)

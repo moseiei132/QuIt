@@ -158,8 +158,9 @@ struct AboutTabView: View {
                             set: { updateChecker.autoCheckEnabled = $0 }
                         )
                     )
-                    .toggleStyle(.switch)
                     .font(.subheadline)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
 
                     Text("QuIt will check for updates daily")
                         .font(.caption)
