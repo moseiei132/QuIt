@@ -21,6 +21,8 @@ struct AutoQuitTabView: View {
     @State private var showingActiveTimersSheet = false
     @State private var selectedBundleID: String?
     @State private var customTimeout: TimeInterval = 300
+    @StateObject private var runningAppsModel = RunningAppsModel()
+    @State private var showingAddAppSheet = false
 
     var body: some View {
         ScrollView {
@@ -62,6 +64,15 @@ struct AutoQuitTabView: View {
         }
         .sheet(isPresented: $showingActiveTimersSheet) {
             activeTimersSheet
+        }
+        .sheet(isPresented: $showingAddAppSheet) {
+            AddAppSheet(showingSheet: $showingAddAppSheet, runningAppsModel: runningAppsModel) {
+                app in
+                if let bundleId = app.bundleIdentifier {
+                    customTimeout = autoQuitManager.getTimeout(for: bundleId)
+                    selectedBundleID = bundleId
+                }
+            }
         }
     }
 
@@ -296,7 +307,8 @@ struct AutoQuitTabView: View {
 
                     // Add button
                     Button {
-                        openApplicationPicker()
+                        runningAppsModel.reload()
+                        showingAddAppSheet = true
                     } label: {
                         Label("Add", systemImage: "plus.circle.fill")
                             .labelStyle(.iconOnly)

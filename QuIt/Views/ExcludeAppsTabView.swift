@@ -16,6 +16,8 @@ struct ExcludeAppsTabView: View {
     @State private var showingRenameSheet = false
     @State private var profileToRename: ExclusionProfile?
     @State private var renameProfileName = ""
+    @StateObject private var runningAppsModel = RunningAppsModel()
+    @State private var showingAddAppSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -169,7 +171,8 @@ struct ExcludeAppsTabView: View {
             // Add button
             HStack {
                 Button {
-                    openApplicationPicker()
+                    runningAppsModel.reload()
+                    showingAddAppSheet = true
                 } label: {
                     Label("Add Application", systemImage: "plus.circle.fill")
                         .font(.body)
@@ -178,6 +181,14 @@ struct ExcludeAppsTabView: View {
                 .help("Choose an application to exclude")
 
                 Spacer()
+            }
+            .sheet(isPresented: $showingAddAppSheet) {
+                AddAppSheet(showingSheet: $showingAddAppSheet, runningAppsModel: runningAppsModel) {
+                    app in
+                    if let bundleId = app.bundleIdentifier {
+                        excludedManager.addExclusion(bundleId)
+                    }
+                }
             }
 
             Spacer()
@@ -242,29 +253,6 @@ struct ExcludeAppsTabView: View {
             }
             .padding(20)
             .frame(width: 300)
-        }
-    }
-
-    private func openApplicationPicker() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Application to Exclude"
-        panel.message = "Select an application to exclude from the running apps list"
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowedContentTypes = [.application]
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-
-        panel.begin { response in
-            guard response == .OK else { return }
-
-            for url in panel.urls {
-                if let bundle = Bundle(url: url),
-                    let bundleID = bundle.bundleIdentifier
-                {
-                    excludedManager.addExclusion(bundleID)
-                }
-            }
         }
     }
 
