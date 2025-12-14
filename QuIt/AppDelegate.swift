@@ -108,6 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
         NotificationCenter.default.post(name: .popoverWillOpen, object: nil)
     }
 
+    // NSPopoverDelegate method - called to determine if popover should close
+    func popoverShouldClose(_ popover: NSPopover) -> Bool {
+        // Allow popover to close when it loses focus
+        return true
+    }
+
     // MARK: - UNUserNotificationCenterDelegate
 
     func userNotificationCenter(
