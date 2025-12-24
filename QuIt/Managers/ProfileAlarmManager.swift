@@ -153,6 +153,7 @@ class ProfileAlarmManager: ObservableObject {
         if alarm.autoSwitch {
             content.title = "Profile Auto-Switched"
             content.body = "Switched to '\(profileName)' profile"
+            content.categoryIdentifier = "PROFILE_SWITCH_AUTO"  // Different category for auto-switch
         } else {
             content.title = "Profile Switch Reminder"
             content.body = "Time to switch to '\(profileName)' profile"

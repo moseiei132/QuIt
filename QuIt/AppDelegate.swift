@@ -82,7 +82,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
             options: []
         )
 
-        center.setNotificationCategories([category])
+        // Auto-switch category - no actions, just informational
+        let autoSwitchCategory = UNNotificationCategory(
+            identifier: "PROFILE_SWITCH_AUTO",
+            actions: [],  // No actions for auto-switch
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.setNotificationCategories([category, autoSwitchCategory])
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -158,8 +166,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
         let alarmID = userInfo["alarmID"] as? String ?? ""
         let profileIDStr = userInfo["profileID"] as? String ?? ""
         let profileName = userInfo["profileName"] as? String ?? "Unknown"
+        let autoSwitch = userInfo["autoSwitch"] as? Bool ?? false
 
         print("📱 Received notification action: \(response.actionIdentifier)")
+
+        // Handle auto-switch for default action (when user dismisses notification)
+        // This covers the case when notification was delivered in background
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier && autoSwitch {
+            if let profileID = UUID(uuidString: profileIDStr) {
+                // Skip if already on target profile
+                if ExcludedAppsManager.shared.selectedProfileID != profileID {
+                    await MainActor.run {
+                        ExcludedAppsManager.shared.selectedProfileID = profileID
+                        print("✅ Auto-switched to profile (background): \(profileName)")
+
+                        // Send confirmation notification
+                        sendConfirmationNotification(profileName: profileName)
+                    }
+                }
+            }
+            return
+        }
 
         switch response.actionIdentifier {
         case "SWITCH_PROFILE":
@@ -186,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
             }
 
         case UNNotificationDefaultActionIdentifier:
-            // User clicked notification body - show mini window
+            // User clicked notification body - show mini window (non-autoSwitch alarms)
             await MainActor.run {
                 showAlarmNotificationWindow(
                     profileID: profileIDStr, profileName: profileName, alarmID: alarmID)
