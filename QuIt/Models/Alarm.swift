@@ -1,33 +1,36 @@
 //
-//  ProfileAlarm.swift
+//  Alarm.swift
 //  QuIt
 //
-//  Created by Antigravity on 12/12/2568 BE.
+//  Created by Antigravity on 04/01/2569 BE.
 //
 
 import Foundation
 
-struct ProfileAlarm: Codable, Identifiable, Hashable {
+struct Alarm: Codable, Identifiable, Hashable {
     let id: UUID
     var time: DateComponents  // hour, minute (e.g., 9:00 AM = hour: 9, minute: 0)
-    var targetProfileID: UUID
+    var type: AlarmType
+    var targetID: UUID  // Profile ID or Template ID
     var isEnabled: Bool
-    var autoSwitch: Bool  // true = auto-switch, false = alert only
+    var autoExecute: Bool  // true = auto-run, false = notification only
     var daysOfWeek: Set<Int>  // 1=Sunday, 2=Monday, ..., 7=Saturday. Empty = every day
 
     init(
         id: UUID = UUID(),
         time: DateComponents,
-        targetProfileID: UUID,
+        type: AlarmType,
+        targetID: UUID,
         isEnabled: Bool = true,
-        autoSwitch: Bool = true,
+        autoExecute: Bool = true,
         daysOfWeek: Set<Int> = []
     ) {
         self.id = id
         self.time = time
-        self.targetProfileID = targetProfileID
+        self.type = type
+        self.targetID = targetID
         self.isEnabled = isEnabled
-        self.autoSwitch = autoSwitch
+        self.autoExecute = autoExecute
         self.daysOfWeek = daysOfWeek
     }
 
@@ -72,5 +75,15 @@ struct ProfileAlarm: Codable, Identifiable, Hashable {
         let calendar = Calendar.current
         let today = calendar.component(.weekday, from: Date())
         return daysOfWeek.contains(today)
+    }
+    
+    // Helper to get target name based on type
+    func getTargetName() -> String? {
+        switch type {
+        case .profile:
+            return ExcludedAppsManager.shared.profiles.first(where: { $0.id == targetID })?.name
+        case .template:
+            return AppTemplateManager.shared.templates.first(where: { $0.id == targetID })?.name
+        }
     }
 }

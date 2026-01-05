@@ -11,19 +11,25 @@ import SwiftUI
 
 struct SnoozedAlarmRow: View {
     let snooze: SnoozedAlarm
-    @ObservedObject private var alarmManager = ProfileAlarmManager.shared
+    @ObservedObject private var alarmManager = AlarmManager.shared
     @State private var timeRemaining: String = ""
     @State private var timer: Timer?
 
     var body: some View {
         HStack(spacing: 12) {
+            // Type icon
+            Image(systemName: snooze.type.icon)
+                .font(.system(size: 18))
+                .foregroundColor(snooze.type == .profile ? .blue : .purple)
+                .frame(width: 24)
+            
             Image(systemName: "clock.fill")
                 .font(.system(size: 20))
                 .foregroundColor(.orange)
                 .frame(width: 30)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(snooze.profileName)
+                Text(snooze.targetName)
                     .font(.body)
                     .fontWeight(.medium)
 

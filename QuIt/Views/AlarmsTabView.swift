@@ -1,38 +1,77 @@
 //
-//  ProfileAlarmsTabView.swift
+//  AlarmsTabView.swift
 //  QuIt
 //
-//  Created by Antigravity on 12/12/2568 BE.
+//  Created by Antigravity on 04/01/2569 BE.
 //
 
 import SwiftUI
 
-struct ProfileAlarmsTabView: View {
-    @ObservedObject private var alarmManager = ProfileAlarmManager.shared
+enum AlarmFilter: String, CaseIterable {
+    case all = "All"
+    case profiles = "Profiles"
+    case templates = "Templates"
+    
+    var icon: String {
+        switch self {
+        case .all:
+            return "clock"
+        case .profiles:
+            return "person.crop.circle"
+        case .templates:
+            return "list.bullet.rectangle"
+        }
+    }
+}
+
+struct AlarmsTabView: View {
+    @ObservedObject private var alarmManager = AlarmManager.shared
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
+    @ObservedObject private var templateManager = AppTemplateManager.shared
 
     @State private var showingAddAlarm = false
-    @State private var editingAlarm: ProfileAlarm?
+    @State private var editingAlarm: Alarm?
+    @State private var selectedFilter: AlarmFilter = .all
+
+    var filteredAlarms: [Alarm] {
+        switch selectedFilter {
+        case .all:
+            return alarmManager.alarms
+        case .profiles:
+            return alarmManager.alarms.filter { $0.type == .profile }
+        case .templates:
+            return alarmManager.alarms.filter { $0.type == .template }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
-            Text("Profile Alarms")
+            Text("Alarms")
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Schedule automatic profile switching at specific times")
+            Text("Schedule automatic profile switching or template launching")
                 .font(.callout)
                 .foregroundColor(.secondary)
 
             Divider()
 
+            // Filter Picker
+            Picker("", selection: $selectedFilter) {
+                ForEach(AlarmFilter.allCases, id: \.self) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.bottom, 8)
+
             // Alarms List
-            if alarmManager.alarms.isEmpty {
+            if filteredAlarms.isEmpty {
                 emptyStateView
             } else {
                 List {
-                    ForEach(alarmManager.alarms) { alarm in
+                    ForEach(filteredAlarms) { alarm in
                         AlarmRowView(
                             alarm: alarm,
                             onEdit: {
@@ -83,7 +122,7 @@ struct ProfileAlarmsTabView: View {
             AddEditAlarmView(
                 alarm: nil,
                 onSave: { alarm in
-                    alarmManager.addAlarm(alarm)
+                    _ = alarmManager.addAlarm(alarm)
                     showingAddAlarm = false
                 },
                 onCancel: {
@@ -105,9 +144,13 @@ struct ProfileAlarmsTabView: View {
 
     private var emptyStateView: some View {
         ContentUnavailableView(
-            "No Alarms",
-            systemImage: "alarm",
-            description: Text("Create an alarm to automatically switch profiles at specific times")
+            selectedFilter == .all ? "No Alarms" : "No \(selectedFilter.rawValue)",
+            systemImage: selectedFilter.icon,
+            description: Text(
+                selectedFilter == .all
+                    ? "Create an alarm to automatically execute actions at specific times"
+                    : "No \(selectedFilter.rawValue.lowercased()) alarms configured"
+            )
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
@@ -116,12 +159,33 @@ struct ProfileAlarmsTabView: View {
 // MARK: - Alarm Row View
 
 struct AlarmRowView: View {
-    let alarm: ProfileAlarm
+    let alarm: Alarm
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onToggle: () -> Void
 
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
+    @ObservedObject private var templateManager = AppTemplateManager.shared
+
+    var targetName: String {
+        alarm.getTargetName() ?? "Unknown"
+    }
+
+    var iconName: String {
+        if alarm.autoExecute {
+            return alarm.type == .profile ? "arrow.triangle.2.circlepath" : "play.circle"
+        } else {
+            return "bell"
+        }
+    }
+
+    var iconColor: Color {
+        if alarm.autoExecute {
+            return alarm.type == .profile ? .blue : .purple
+        } else {
+            return .orange
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -144,18 +208,22 @@ struct AlarmRowView: View {
                 .foregroundColor(alarm.isEnabled ? .primary : .secondary)
                 .frame(width: 80, alignment: .leading)
 
-            // Profile, days, and mode
+            // Type icon, target name, days, and mode
             VStack(alignment: .leading, spacing: 3) {
-                if let profileName = excludedManager.profiles.first(where: {
-                    $0.id == alarm.targetProfileID
-                })?.name {
-                    HStack(spacing: 4) {
-                        Image(systemName: alarm.autoSwitch ? "arrow.triangle.2.circlepath" : "bell")
-                            .font(.caption2)
-                            .foregroundColor(alarm.autoSwitch ? .blue : .orange)
-                        Text(profileName)
-                            .font(.body)
-                    }
+                HStack(spacing: 6) {
+                    // Type indicator
+                    Image(systemName: alarm.type.icon)
+                        .font(.caption)
+                        .foregroundColor(alarm.type == .profile ? .blue : .purple)
+                        .frame(width: 16)
+
+                    // Mode indicator
+                    Image(systemName: iconName)
+                        .font(.caption2)
+                        .foregroundColor(iconColor)
+
+                    Text(targetName)
+                        .font(.body)
                 }
 
                 if !alarm.daysOfWeek.isEmpty {
@@ -197,32 +265,49 @@ struct AlarmRowView: View {
 // MARK: - Add/Edit Alarm View
 
 struct AddEditAlarmView: View {
-    let alarm: ProfileAlarm?
-    let onSave: (ProfileAlarm) -> Void
+    let alarm: Alarm?
+    let onSave: (Alarm) -> Void
     let onCancel: () -> Void
 
     @ObservedObject private var excludedManager = ExcludedAppsManager.shared
+    @ObservedObject private var templateManager = AppTemplateManager.shared
 
     @State private var selectedHour: Int = 9
     @State private var selectedMinute: Int = 0
-    @State private var selectedProfileID: UUID?
-    @State private var autoSwitch: Bool = true
+    @State private var selectedType: AlarmType = .profile
+    @State private var selectedTargetID: UUID?
+    @State private var autoExecute: Bool = true
     @State private var selectedDays: Set<Int> = []
 
     private let hours = Array(0...23)
-    private let minutes = Array(0...59)  // 1-minute increments for precise timing
+    private let minutes = Array(0...59)
 
     init(
-        alarm: ProfileAlarm?, onSave: @escaping (ProfileAlarm) -> Void,
+        alarm: Alarm?, onSave: @escaping (Alarm) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.alarm = alarm
         self.onSave = onSave
         self.onCancel = onCancel
 
-        // Initialize selectedProfileID with a default value to avoid Picker warning
-        _selectedProfileID = State(
-            initialValue: alarm?.targetProfileID ?? ExcludedAppsManager.shared.profiles.first?.id)
+        // Initialize with appropriate default
+        if let alarm = alarm {
+            _selectedType = State(initialValue: alarm.type)
+            _selectedTargetID = State(initialValue: alarm.targetID)
+        } else {
+            _selectedType = State(initialValue: .profile)
+            _selectedTargetID = State(
+                initialValue: ExcludedAppsManager.shared.profiles.first?.id)
+        }
+    }
+
+    var availableTargets: [(id: UUID, name: String)] {
+        switch selectedType {
+        case .profile:
+            return excludedManager.profiles.map { (id: $0.id, name: $0.name) }
+        case .template:
+            return templateManager.templates.map { (id: $0.id, name: $0.name) }
+        }
     }
 
     var body: some View {
@@ -233,6 +318,26 @@ struct AddEditAlarmView: View {
                 .fontWeight(.bold)
 
             Divider()
+
+            // Type Picker (only for new alarms)
+            if alarm == nil {
+                Picker("", selection: $selectedType) {
+                    Text(AlarmType.profile.displayName).tag(AlarmType.profile)
+                    Text(AlarmType.template.displayName).tag(AlarmType.template)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedType) {
+                    // Reset target when type changes
+                    switch selectedType {
+                    case .profile:
+                        selectedTargetID = excludedManager.profiles.first?.id
+                    case .template:
+                        selectedTargetID = templateManager.templates.first?.id
+                    }
+                }
+
+                Divider()
+            }
 
             // Time Picker
             VStack(alignment: .leading, spacing: 8) {
@@ -263,28 +368,42 @@ struct AddEditAlarmView: View {
 
             Divider()
 
-            // Profile Picker
+            // Target Picker
             VStack(alignment: .leading, spacing: 8) {
-                Text("Target Profile")
+                Text(selectedType == .profile ? "Target Profile" : "Target Template")
                     .font(.headline)
 
-                Picker("Profile", selection: $selectedProfileID) {
-                    ForEach(excludedManager.profiles) { profile in
-                        Text(profile.name).tag(profile.id as UUID?)
+                if availableTargets.isEmpty {
+                    Text("No \(selectedType.rawValue)s available")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                } else {
+                    Picker("Target", selection: $selectedTargetID) {
+                        ForEach(availableTargets, id: \.id) { target in
+                            Text(target.name).tag(target.id as UUID?)
+                        }
                     }
+                    .labelsHidden()
                 }
-                .labelsHidden()
             }
 
             Divider()
 
-            // Auto-switch Toggle
-            Toggle("Auto-switch profile (no confirmation)", isOn: $autoSwitch)
-                .font(.body)
+            // Auto-execute Toggle
+            Toggle(
+                selectedType == .profile
+                    ? "Auto-switch profile (no confirmation)"
+                    : "Auto-launch template (no confirmation)",
+                isOn: $autoExecute
+            )
+            .font(.body)
 
             Text(
-                autoSwitch
-                    ? "Profile will switch automatically" : "Shows notification with Switch button"
+                autoExecute
+                    ? (selectedType == .profile
+                        ? "Profile will switch automatically when alarm triggers"
+                        : "Template will launch automatically when alarm triggers")
+                    : "Shows notification with action button"
             )
             .font(.caption)
             .foregroundColor(.secondary)
@@ -357,42 +476,44 @@ struct AddEditAlarmView: View {
                     saveAlarm()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(selectedProfileID == nil)
+                .disabled(selectedTargetID == nil || availableTargets.isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
-        .frame(width: 500, height: 600)
+        .frame(width: 500, height: 650)
         .onAppear {
             if let alarm = alarm {
                 selectedHour = alarm.time.hour ?? 9
                 selectedMinute = alarm.time.minute ?? 0
-                selectedProfileID = alarm.targetProfileID
-                autoSwitch = alarm.autoSwitch
+                selectedType = alarm.type
+                selectedTargetID = alarm.targetID
+                autoExecute = alarm.autoExecute
                 selectedDays = alarm.daysOfWeek
             } else {
-                // selectedProfileID already set in init to first profile
                 selectedHour = 9
                 selectedMinute = 0
-                autoSwitch = true
+                autoExecute = true
                 selectedDays = []
+                // selectedTargetID and selectedType already set in init
             }
         }
     }
 
     private func saveAlarm() {
-        guard let profileID = selectedProfileID else { return }
+        guard let targetID = selectedTargetID else { return }
 
         var dateComponents = DateComponents()
         dateComponents.hour = selectedHour
         dateComponents.minute = selectedMinute
 
-        let newAlarm = ProfileAlarm(
+        let newAlarm = Alarm(
             id: alarm?.id ?? UUID(),
             time: dateComponents,
-            targetProfileID: profileID,
+            type: selectedType,
+            targetID: targetID,
             isEnabled: true,
-            autoSwitch: autoSwitch,
+            autoExecute: autoExecute,
             daysOfWeek: selectedDays
         )
 

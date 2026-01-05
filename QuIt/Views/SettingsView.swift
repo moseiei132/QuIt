@@ -82,7 +82,7 @@ struct SettingsView: View {
                         }
                     case .alarms:
                         NavigationStack {
-                            ProfileAlarmsTabView()
+                            AlarmsTabView()
                         }
                     }
                 } else {

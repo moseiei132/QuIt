@@ -8,8 +8,9 @@
 import SwiftUI
 
 struct AlarmNotificationView: View {
-    let profileName: String
-    let onSwitch: () -> Void
+    let targetName: String
+    let isProfile: Bool
+    let onExecute: () -> Void
     let onReject: () -> Void
     let onSnooze: (Int) -> Void  // Takes minutes as parameter
 
@@ -22,6 +23,24 @@ struct AlarmNotificationView: View {
         (minutes: 30, label: "30 min"),
         (minutes: 60, label: "1 hour"),
     ]
+    
+    private var title: String {
+        isProfile ? "Profile Switch Reminder" : "Template Launch Reminder"
+    }
+    
+    private var message: String {
+        isProfile 
+            ? "Time to switch to '\(targetName)' profile"
+            : "Time to launch '\(targetName)' template"
+    }
+    
+    private var actionButtonText: String {
+        isProfile ? "Switch to \(targetName)" : "Launch \(targetName)"
+    }
+    
+    private var actionIcon: String {
+        isProfile ? "arrow.right.circle.fill" : "play.circle.fill"
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -29,14 +48,14 @@ struct AlarmNotificationView: View {
             HStack(spacing: 12) {
                 Image(systemName: "alarm.fill")
                     .font(.system(size: 24))
-                    .foregroundColor(.blue)
+                    .foregroundColor(isProfile ? .blue : .purple)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Profile Switch Reminder")
+                    Text(title)
                         .font(.headline)
                         .fontWeight(.semibold)
 
-                    Text("Time to switch to '\(profileName)' profile")
+                    Text(message)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -94,15 +113,15 @@ struct AlarmNotificationView: View {
             } else {
                 // Main action buttons
                 VStack(spacing: 8) {
-                    Button(action: onSwitch) {
+                    Button(action: onExecute) {
                         HStack {
-                            Image(systemName: "arrow.right.circle.fill")
-                            Text("Switch to \(profileName)")
+                            Image(systemName: actionIcon)
+                            Text(actionButtonText)
                             Spacer()
                         }
                         .padding(12)
                         .frame(maxWidth: .infinity)
-                        .background(Color.blue)
+                        .background(isProfile ? Color.blue : Color.purple)
                         .foregroundColor(.white)
                         .cornerRadius(8)
                     }

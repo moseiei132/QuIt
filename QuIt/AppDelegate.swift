@@ -35,8 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
         setupNotifications()
 
         // Initialize alarm manager and reschedule all alarms
-        _ = ProfileAlarmManager.shared
-        ProfileAlarmManager.shared.rescheduleAllAlarms()
+        _ = AlarmManager.shared
+        AlarmManager.shared.rescheduleAllAlarms()
 
         // Check for updates after launch (with delay to not slow down startup)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -63,9 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
             title: "Switch Profile",
             options: [.foreground]
         )
+        
+        let launchAction = UNNotificationAction(
+            identifier: "LAUNCH_TEMPLATE",
+            title: "Launch Template",
+            options: [.foreground]
+        )
 
         let rejectAction = UNNotificationAction(
-            identifier: "REJECT_SWITCH",
+            identifier: "REJECT_ACTION",
             title: "Reject"
         )
 
@@ -75,22 +81,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
             title: "Snooze"
         )
 
-        let category = UNNotificationCategory(
+        let profileCategory = UNNotificationCategory(
             identifier: "PROFILE_SWITCH",
             actions: [switchAction, rejectAction, snoozeAction],
             intentIdentifiers: [],
             options: []
         )
-
-        // Auto-switch category - no actions, just informational
-        let autoSwitchCategory = UNNotificationCategory(
-            identifier: "PROFILE_SWITCH_AUTO",
-            actions: [],  // No actions for auto-switch
+        
+        let templateCategory = UNNotificationCategory(
+            identifier: "TEMPLATE_LAUNCH",
+            actions: [launchAction, rejectAction, snoozeAction],
             intentIdentifiers: [],
             options: []
         )
 
-        center.setNotificationCategories([category, autoSwitchCategory])
+        // Auto categories - no actions, just informational
+        let autoSwitchCategory = UNNotificationCategory(
+            identifier: "PROFILE_SWITCH_AUTO",
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        
+        let autoLaunchCategory = UNNotificationCategory(
+            identifier: "TEMPLATE_LAUNCH_AUTO",
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.setNotificationCategories([profileCategory, templateCategory, autoSwitchCategory, autoLaunchCategory])
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -130,20 +150,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
     ) async -> UNNotificationPresentationOptions {
         // Check if this is an alarm notification
         let userInfo = notification.request.content.userInfo
-
-        if let profileIDStr = userInfo["profileID"] as? String,
-            let profileID = UUID(uuidString: profileIDStr),
-            let autoSwitch = userInfo["autoSwitch"] as? Bool
+        let alarmTypeStr = userInfo["alarmType"] as? String
+        let autoExecute = userInfo["autoSwitch"] as? Bool ?? userInfo["autoExecute"] as? Bool ?? false
+        
+        print("🔔 willPresent called - Type: \(alarmTypeStr ?? "unknown"), AutoExecute: \(autoExecute)")
+        
+        // Handle profile alarm
+        if alarmTypeStr == "profile",
+           let profileIDStr = userInfo["profileID"] as? String,
+           let profileID = UUID(uuidString: profileIDStr)
         {
-
             // Skip notification if current profile already matches target
             if ExcludedAppsManager.shared.selectedProfileID == profileID {
                 print("⏭️ Skipping notification - already on target profile")
                 return []  // Don't show notification
             }
 
-            // If auto-switch mode, switch profile immediately
-            if autoSwitch {
+            // If auto-execute mode, switch profile immediately
+            if autoExecute {
                 await MainActor.run {
                     ExcludedAppsManager.shared.selectedProfileID = profileID
                     if let profileName = userInfo["profileName"] as? String {
@@ -153,8 +177,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
                 return []  // Don't show notification after auto-switch
             }
         }
+        
+        // Handle template alarm
+        if alarmTypeStr == "template",
+           let templateIDStr = userInfo["templateID"] as? String,
+           let templateID = UUID(uuidString: templateIDStr)
+        {
+            print("🎯 Template alarm detected - ID: \(templateID)")
+            
+            // If auto-execute mode, launch template immediately
+            if autoExecute {
+                print("🚀 Attempting to auto-launch template...")
+                await MainActor.run {
+                    if let template = AppTemplateManager.shared.templates.first(where: { $0.id == templateID }) {
+                        print("✅ Found template: \(template.name)")
+                        AppTemplateManager.shared.launch(template: template)
+                        if let templateName = userInfo["templateName"] as? String {
+                            print("✅ Auto-launched template: \(templateName)")
+                        }
+                    } else {
+                        print("❌ Template not found!")
+                    }
+                }
+                return []  // Don't show notification after auto-launch
+            }
+        }
 
         // Show notification for alert mode
+        print("📢 Showing notification banner")
         return [.banner, .sound]
     }
 
@@ -164,26 +214,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
     ) async {
         let userInfo = response.notification.request.content.userInfo
         let alarmID = userInfo["alarmID"] as? String ?? ""
+        let alarmTypeStr = userInfo["alarmType"] as? String
+        let autoExecute = userInfo["autoSwitch"] as? Bool ?? userInfo["autoExecute"] as? Bool ?? false
+        
+        // Profile alarm info
         let profileIDStr = userInfo["profileID"] as? String ?? ""
         let profileName = userInfo["profileName"] as? String ?? "Unknown"
-        let autoSwitch = userInfo["autoSwitch"] as? Bool ?? false
+        
+        // Template alarm info
+        let templateIDStr = userInfo["templateID"] as? String ?? ""
+        let templateName = userInfo["templateName"] as? String ?? "Unknown"
 
         print("📱 Received notification action: \(response.actionIdentifier)")
 
-        // Handle auto-switch for default action (when user dismisses notification)
-        // This covers the case when notification was delivered in background
-        if response.actionIdentifier == UNNotificationDefaultActionIdentifier && autoSwitch {
-            if let profileID = UUID(uuidString: profileIDStr) {
-                // Skip if already on target profile
-                if ExcludedAppsManager.shared.selectedProfileID != profileID {
+        // Handle default action (user clicked on notification banner or dismissed it)
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            // For auto-execute alarms, execute immediately
+            if autoExecute {
+                if alarmTypeStr == "profile", let profileID = UUID(uuidString: profileIDStr) {
+                    if ExcludedAppsManager.shared.selectedProfileID != profileID {
+                        await MainActor.run {
+                            ExcludedAppsManager.shared.selectedProfileID = profileID
+                            print("✅ Auto-switched to profile: \(profileName)")
+                            sendProfileConfirmationNotification(profileName: profileName)
+                        }
+                    }
+                } else if alarmTypeStr == "template", let templateID = UUID(uuidString: templateIDStr) {
                     await MainActor.run {
-                        ExcludedAppsManager.shared.selectedProfileID = profileID
-                        print("✅ Auto-switched to profile (background): \(profileName)")
-
-                        // Send confirmation notification
-                        sendConfirmationNotification(profileName: profileName)
+                        if let template = AppTemplateManager.shared.templates.first(where: { $0.id == templateID }) {
+                            AppTemplateManager.shared.launch(template: template)
+                            print("✅ Auto-launched template: \(templateName)")
+                            sendTemplateConfirmationNotification(templateName: templateName)
+                        }
                     }
                 }
+                return
+            }
+            
+            // For non-auto alarms, show the notification window
+            await MainActor.run {
+                showAlarmNotificationWindow(
+                    alarmID: alarmID,
+                    alarmType: alarmTypeStr ?? "profile",
+                    targetID: alarmTypeStr == "template" ? templateIDStr : profileIDStr,
+                    targetName: alarmTypeStr == "template" ? templateName : profileName
+                )
             }
             return
         }
@@ -195,28 +270,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
                 await MainActor.run {
                     ExcludedAppsManager.shared.selectedProfileID = profileID
                     print("✅ Switched to profile: \(profileName)")
-
-                    // Send confirmation notification
-                    sendConfirmationNotification(profileName: profileName)
+                    sendProfileConfirmationNotification(profileName: profileName)
+                }
+            }
+            
+        case "LAUNCH_TEMPLATE":
+            // Launch template immediately
+            if let templateID = UUID(uuidString: templateIDStr),
+               let template = AppTemplateManager.shared.templates.first(where: { $0.id == templateID }) {
+                await MainActor.run {
+                    AppTemplateManager.shared.launch(template: template)
+                    print("✅ Launched template: \(templateName)")
+                    sendTemplateConfirmationNotification(templateName: templateName)
                 }
             }
 
-        case "REJECT_SWITCH":
-            // User rejected the switch, do nothing
-            print("❌ Profile switch rejected")
+        case "REJECT_ACTION":
+            // User rejected the action, do nothing
+            print("❌ Alarm action rejected")
 
         case "SNOOZE_ALARM":
             // Show snooze modal to select duration
             await MainActor.run {
                 showAlarmNotificationWindow(
-                    profileID: profileIDStr, profileName: profileName, alarmID: alarmID)
-            }
-
-        case UNNotificationDefaultActionIdentifier:
-            // User clicked notification body - show mini window (non-autoSwitch alarms)
-            await MainActor.run {
-                showAlarmNotificationWindow(
-                    profileID: profileIDStr, profileName: profileName, alarmID: alarmID)
+                    alarmID: alarmID,
+                    alarmType: alarmTypeStr ?? "profile",
+                    targetID: alarmTypeStr == "template" ? templateIDStr : profileIDStr,
+                    targetName: alarmTypeStr == "template" ? templateName : profileName
+                )
             }
 
         default:
@@ -226,41 +307,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
     }
 
     private func showAlarmNotificationWindow(
-        profileID: String, profileName: String, alarmID: String
+        alarmID: String, alarmType: String, targetID: String, targetName: String
     ) {
         // Close existing window if any
         alarmNotificationWindow?.close()
+        
+        let isProfile = alarmType == "profile"
 
         let notificationView = AlarmNotificationView(
-            profileName: profileName,
-            onSwitch: {
-                // Switch profile
-                if let profileUUID = UUID(uuidString: profileID) {
-                    ExcludedAppsManager.shared.selectedProfileID = profileUUID
-                    print("✅ Switched to profile: \(profileName)")
-
-                    // Send confirmation notification
-                    self.sendConfirmationNotification(profileName: profileName)
+            targetName: targetName,
+            isProfile: isProfile,
+            onExecute: {
+                if isProfile {
+                    // Switch profile
+                    if let profileUUID = UUID(uuidString: targetID) {
+                        ExcludedAppsManager.shared.selectedProfileID = profileUUID
+                        print("✅ Switched to profile: \(targetName)")
+                        self.sendProfileConfirmationNotification(profileName: targetName)
+                    }
+                } else {
+                    // Launch template
+                    if let templateUUID = UUID(uuidString: targetID),
+                       let template = AppTemplateManager.shared.templates.first(where: { $0.id == templateUUID }) {
+                        AppTemplateManager.shared.launch(template: template)
+                        print("✅ Launched template: \(targetName)")
+                        self.sendTemplateConfirmationNotification(templateName: targetName)
+                    }
                 }
                 self.alarmNotificationWindow?.close()
                 self.alarmNotificationWindow = nil
             },
             onReject: {
-                // Just close
-                print("❌ Profile switch rejected")
+                print("❌ Alarm action rejected")
                 self.alarmNotificationWindow?.close()
                 self.alarmNotificationWindow = nil
             },
             onSnooze: { minutes in
-                // Snooze for selected duration
-                ProfileAlarmManager.shared.scheduleSnoozeNotification(
-                    alarmID: alarmID,
-                    profileID: profileID,
-                    profileName: profileName,
-                    minutes: minutes
-                )
-
-                print("⏰ Snoozed for \(minutes) minutes")
+                // Find the alarm and snooze it
+                if let alarm = AlarmManager.shared.alarms.first(where: { "alarm-\($0.id.uuidString)" == alarmID }) {
+                    AlarmManager.shared.scheduleSnoozeNotification(
+                        alarm: alarm,
+                        minutes: minutes
+                    )
+                    print("⏰ Snoozed for \(minutes) minutes")
+                }
                 self.alarmNotificationWindow?.close()
                 self.alarmNotificationWindow = nil
             }
@@ -287,7 +377,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
         alarmNotificationWindow = window
     }
 
-    private func sendConfirmationNotification(profileName: String) {
+    private func sendProfileConfirmationNotification(profileName: String) {
         let content = UNMutableNotificationContent()
         content.title = "Profile Switched"
         content.body = "Now using '\(profileName)' profile"
@@ -296,7 +386,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
         let request = UNNotificationRequest(
             identifier: "profile-switched-\(UUID().uuidString)",
             content: content,
-            trigger: nil  // Show immediately
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("❌ Failed to send confirmation: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func sendTemplateConfirmationNotification(templateName: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Template Launched"
+        content.body = "Launched '\(templateName)' template"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "template-launched-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
         )
 
         UNUserNotificationCenter.current().add(request) { error in
