@@ -171,10 +171,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
                 await MainActor.run {
                     ExcludedAppsManager.shared.selectedProfileID = profileID
                     if let profileName = userInfo["profileName"] as? String {
-                        print("✅ Auto-switched to profile: \(profileName)")
+                        print("✅ Auto-switched to profile (foreground): \(profileName)")
                     }
                 }
-                return []  // Don't show notification after auto-switch
+                // Still show notification banner to inform user
+                print("📢 Showing notification banner for auto-switched profile")
+                return [.banner, .sound]
             }
         }
         
@@ -193,13 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
                         print("✅ Found template: \(template.name)")
                         AppTemplateManager.shared.launch(template: template)
                         if let templateName = userInfo["templateName"] as? String {
-                            print("✅ Auto-launched template: \(templateName)")
+                            print("✅ Auto-launched template (foreground): \(templateName)")
                         }
                     } else {
                         print("❌ Template not found!")
                     }
                 }
-                return []  // Don't show notification after auto-launch
+                // Still show notification banner to inform user
+                print("📢 Showing notification banner for auto-launched template")
+                return [.banner, .sound]
             }
         }
 
@@ -226,8 +230,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate,
         let templateName = userInfo["templateName"] as? String ?? "Unknown"
 
         print("📱 Received notification action: \(response.actionIdentifier)")
+        
+        // Handle dismiss action (notification delivered in background)
+        // This is crucial for auto-execute to work when app is in background
+        if response.actionIdentifier == UNNotificationDismissActionIdentifier {
+            print("🔔 Notification dismissed/delivered in background")
+            
+            // For auto-execute alarms, execute immediately even in background
+            if autoExecute {
+                if alarmTypeStr == "profile", let profileID = UUID(uuidString: profileIDStr) {
+                    if ExcludedAppsManager.shared.selectedProfileID != profileID {
+                        await MainActor.run {
+                            ExcludedAppsManager.shared.selectedProfileID = profileID
+                            print("✅ Auto-switched to profile in background: \(profileName)")
+                            sendProfileConfirmationNotification(profileName: profileName)
+                        }
+                    } else {
+                        print("⏭️ Already on target profile: \(profileName)")
+                    }
+                } else if alarmTypeStr == "template", let templateID = UUID(uuidString: templateIDStr) {
+                    await MainActor.run {
+                        if let template = AppTemplateManager.shared.templates.first(where: { $0.id == templateID }) {
+                            AppTemplateManager.shared.launch(template: template)
+                            print("✅ Auto-launched template in background: \(templateName)")
+                            sendTemplateConfirmationNotification(templateName: templateName)
+                        } else {
+                            print("❌ Template not found: \(templateID)")
+                        }
+                    }
+                }
+            }
+            return
+        }
 
-        // Handle default action (user clicked on notification banner or dismissed it)
+        // Handle default action (user clicked on notification banner)
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
             // For auto-execute alarms, execute immediately
             if autoExecute {
