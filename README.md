@@ -30,6 +30,7 @@ A macOS menu bar app for quickly quitting multiple applications with smart auto-
 2. Open the DMG and drag QuIt to Applications
 3. **First launch**: Right-click QuIt → **Open** (since the app is not notarized)
 4. Click **Open** when macOS warns about unverified developer
+5. **If warning persists**: Go to **System Settings** → **Privacy & Security** and click **"Open Anyway"** under the Security section
 
 > **Why this warning?** QuIt is not notarized with Apple. This is safe - the source code is available for inspection. Future releases may include notarization.
 
